@@ -161,38 +161,116 @@ TRANSCRIBE_PROMPT = ("Transcribe exactamente lo que dice este audio en español 
                      "(«dos kilos» → «2 kilos», «tres soles cincuenta» → «3.50 soles»). Devuelve SOLO el texto, sin comillas.")
 
 
-def transcribe_audio(audio: bytes, mime_type: str = "audio/ogg", timeout: float = 45.0) -> str:
-    """Solo transcribe (rápido): luego las reglas de Kallpa entienden el texto igual que si lo hubiera escrito.
-    WhatsApp por Twilio espera máximo 15 s la respuesta, así que esto tiene que ser corto."""
-    if not enabled():
-        raise AgentUnavailable("Agente de IA desactivado o sin GEMINI_API_KEY")
-    model = os.getenv("AGENT_AUDIO_MODEL") or settings.agent_model   # se puede usar un modelo más rápido solo para audio
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-    t0 = __import__("time").time()
-    parts = [{"inline_data": {"mime_type": mime_type, "data": base64.b64encode(audio).decode()}}, {"text": TRANSCRIBE_PROMPT}]
-    options = _thinking_ok[:1] or _THINKING_OPTIONS
-    last: Exception | None = None
+_GEN_URL = "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent"
+_models_cache: dict[str, Any] = {"t": 0.0, "names": []}
+_good_model: list[str] = []
+_thinking_by_model: dict[str, Any] = {}
+
+
+def list_models(timeout: float = 10.0) -> list[str]:
+    """Modelos Gemini de la cuenta que sirven para generateContent (se guarda 1 hora)."""
+    import time
+    if _models_cache["names"] and time.time() - _models_cache["t"] < 3600:
+        return _models_cache["names"]
+    r = httpx.get("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200",
+                  headers={"x-goog-api-key": settings.gemini_api_key}, timeout=timeout)
+    r.raise_for_status()
+    names = [m["name"].split("/", 1)[-1] for m in r.json().get("models", [])
+             if "generateContent" in (m.get("supportedGenerationMethods") or [])]
+    _models_cache.update(t=time.time(), names=names)
+    return names
+
+
+def audio_model_candidates() -> list[str]:
+    """Orden: el que ya funcionó, el elegido (AGENT_AUDIO_MODEL), el principal y luego los «flash-lite»/«flash» de la cuenta."""
+    first = [*_good_model, os.getenv("AGENT_AUDIO_MODEL") or "", settings.agent_model]
+    extra: list[str] = []
+    try:
+        names = list_models()
+        lite = [n for n in names if "flash" in n and "lite" in n and "tts" not in n and "image" not in n]
+        flash = [n for n in names if "flash" in n and "lite" not in n and "tts" not in n and "image" not in n
+                 and "live" not in n and "thinking" not in n]
+        extra = sorted(lite, reverse=True)[:2] + sorted(flash, reverse=True)[:2]
+    except Exception as e:  # noqa: BLE001
+        log.warning("No pude listar los modelos de Gemini: %s", e)
+    out: list[str] = []
+    for m in first + extra:
+        if m and m not in out:
+            out.append(m)
+    return out[:4]
+
+
+def _generate(model: str, parts: list[dict[str, Any]], timeout: float, max_tokens: int = 400) -> str:
+    """Una llamada a Gemini «pensando poco». Prueba qué opción de pensamiento acepta el modelo y la recuerda."""
+    options = [_thinking_by_model[model]] if model in _thinking_by_model else _THINKING_OPTIONS
+    last = ""
     for th in options:
-        gen: dict[str, Any] = {"temperature": 0, "maxOutputTokens": 400}
+        gen: dict[str, Any] = {"temperature": 0, "maxOutputTokens": max_tokens}
         if th:
             gen["thinkingConfig"] = th
-        body = {"contents": [{"role": "user", "parts": parts}], "generationConfig": gen}
+        r = httpx.post(_GEN_URL.format(model), json={"contents": [{"role": "user", "parts": parts}], "generationConfig": gen},
+                       headers={"x-goog-api-key": settings.gemini_api_key}, timeout=timeout)
+        if r.status_code == 400 and th is not None and model not in _thinking_by_model:
+            last = r.text[:200]
+            continue
+        r.raise_for_status()
+        _thinking_by_model[model] = th
+        if not _thinking_ok:
+            _thinking_ok.append(th)
+        cand = r.json()["candidates"][0]
+        return "".join(p.get("text", "") for p in cand.get("content", {}).get("parts", []) if not p.get("thought"))
+    raise AgentUnavailable(f"{model} rechazó la configuración: {last}")
+
+
+def transcribe_audio(audio: bytes, mime_type: str = "audio/ogg", timeout: float = 45.0) -> str:
+    """Solo transcribe: luego las reglas de Kallpa entienden el texto igual que si lo hubiera escrito.
+    Si un modelo no responde a tiempo, prueba con otro más liviano de la cuenta y se queda con el que funcione."""
+    import time
+    if not enabled():
+        raise AgentUnavailable("Agente de IA desactivado o sin GEMINI_API_KEY")
+    parts = [{"inline_data": {"mime_type": mime_type, "data": base64.b64encode(audio).decode()}}, {"text": TRANSCRIBE_PROMPT}]
+    t0 = time.time()
+    errors = []
+    for model in audio_model_candidates():
+        left = timeout - (time.time() - t0)
+        if left < 4:
+            break
+        t1 = time.time()
         try:
-            r = httpx.post(url, json=body, headers={"x-goog-api-key": settings.gemini_api_key}, timeout=timeout)
-            if r.status_code == 400 and th is not None and not _thinking_ok:
-                last = RuntimeError(r.text[:200])
-                continue   # este modelo no acepta esa opción: pruebo la siguiente
-            r.raise_for_status()
-            cand = r.json()["candidates"][0]
-            text = "".join(p.get("text", "") for p in cand.get("content", {}).get("parts", []) if not p.get("thought"))
-            if not _thinking_ok:
-                _thinking_ok.append(th)
-            log.warning("Gemini transcribió en %.1f s (%s, %s)", __import__("time").time() - t0, model, th)
+            text = _generate(model, parts, timeout=min(18.0, left))
+            log.warning("Gemini transcribió en %.1f s con %s", time.time() - t1, model)
+            if model not in _good_model:
+                _good_model[:] = [model]
             return text.strip().strip("«»\"")
-        except (httpx.HTTPError, KeyError, IndexError) as e:
-            log.warning("Gemini no pudo transcribir: %s", e)
-            raise AgentUnavailable(str(e)) from e
-    raise AgentUnavailable(f"Gemini rechazó la configuración: {last}")
+        except (httpx.HTTPError, KeyError, IndexError, AgentUnavailable) as e:
+            log.warning("Gemini (%s) no pudo transcribir en %.1f s: %s", model, time.time() - t1, str(e)[:200])
+            errors.append(f"{model}: {str(e)[:80]}")
+            if _good_model == [model]:
+                _good_model.clear()
+    raise AgentUnavailable("; ".join(errors) or "sin modelos disponibles")
+
+
+def diagnose() -> dict[str, Any]:
+    """Prueba la clave y la velocidad de cada modelo candidato con un texto corto (para /api/diag/gemini)."""
+    import time
+    out: dict[str, Any] = {"enabled": enabled(), "agent_model": settings.agent_model,
+                           "audio_model_env": os.getenv("AGENT_AUDIO_MODEL") or None, "tests": []}
+    if not enabled():
+        return out
+    try:
+        names = list_models()
+        out["models_available"] = [n for n in names if "gemini" in n][:40]
+    except Exception as e:  # noqa: BLE001
+        out["models_error"] = str(e)[:300]
+    for m in audio_model_candidates():
+        t = time.time()
+        try:
+            txt = _generate(m, [{"text": "Responde solo con la palabra: hola"}], timeout=20, max_tokens=20)
+            out["tests"].append({"model": m, "ok": True, "seconds": round(time.time() - t, 1), "reply": txt[:40],
+                                 "thinking": _thinking_by_model.get(m)})
+        except Exception as e:  # noqa: BLE001
+            out["tests"].append({"model": m, "ok": False, "seconds": round(time.time() - t, 1), "error": str(e)[:300]})
+    return out
 
 
 async def text_to_speech_edge(text: str, output_path: str) -> str:

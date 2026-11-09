@@ -67,6 +67,13 @@ def business_view(b: M.Business) -> dict[str, Any]:
 
 # ------------------------------------------------------------------ estado
 
+@app.get("/api/diag/gemini")
+def diag_gemini():
+    """Diagnóstico de la IA: ¿la clave funciona?, ¿qué modelos hay?, ¿cuánto tarda cada uno? (no muestra la clave)."""
+    from . import agent
+    return agent.diagnose()
+
+
 @app.get("/api/health")
 def health() -> dict[str, Any]:
     return {"ok": True, "time_lima": now_lima().isoformat(), "transcription": transcribe.status(),

@@ -699,6 +699,10 @@ def test_36_gemini_transcribe_rapido_y_con_respaldo(client, monkeypatch):
         def json(self):
             return self._js
 
+    agent._thinking_by_model.clear()
+    agent._good_model.clear()
+    monkeypatch.setattr(agent, "audio_model_candidates", lambda: [settings.agent_model])
+
     def post(url, json=None, headers=None, timeout=None):
         seen.append((json["generationConfig"].get("thinkingConfig"), timeout))
         if len(seen) == 1:
@@ -782,3 +786,47 @@ def test_38_audio_lento_por_twilio_usa_redirect(client, monkeypatch):
     monkeypatch.setattr(main, "_TW_WAIT_S", 3)
     r = client.post("/webhook/twilio/espera?sid=SMaud&n=2", data=form)
     assert "<Message><Body>" in r.text and "S/ 20" in r.text
+
+
+def test_39_si_un_modelo_no_responde_prueba_otro_mas_liviano(monkeypatch):
+    import httpx
+    from app import agent
+    from app.config import settings
+    monkeypatch.setattr(settings, "agent_enabled", True)
+    monkeypatch.setattr(settings, "gemini_api_key", "k")
+    monkeypatch.setattr(settings, "agent_model", "gemini-9-flash")
+    for x in (agent._good_model, agent._thinking_ok):
+        x.clear()
+    agent._thinking_by_model.clear()
+    agent._models_cache.update(t=0.0, names=[])
+
+    class R:
+        def __init__(self, code, js):
+            self.status_code, self._js, self.text = code, js, ""
+        def raise_for_status(self):
+            pass
+        def json(self):
+            return self._js
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: R(200, {"models": [
+        {"name": "models/gemini-9-flash", "supportedGenerationMethods": ["generateContent"]},
+        {"name": "models/gemini-9-flash-lite", "supportedGenerationMethods": ["generateContent"]},
+        {"name": "models/gemini-9-flash-tts", "supportedGenerationMethods": ["generateContent"]}]}))
+    calls = []
+
+    def post(url, json=None, headers=None, timeout=None):
+        calls.append(url.split("/models/")[1].split(":")[0])
+        if "lite" not in url:
+            raise httpx.ReadTimeout("The read operation timed out")
+        return R(200, {"candidates": [{"content": {"parts": [{"text": "vendí 2 kilos de papa"}]}}]})
+    monkeypatch.setattr(httpx, "post", post)
+    assert agent.transcribe_audio(b"ogg") == "vendí 2 kilos de papa"
+    assert calls[0] == "gemini-9-flash" and calls[-1] == "gemini-9-flash-lite" and "gemini-9-flash-tts" not in calls
+    calls.clear()
+    agent.transcribe_audio(b"ogg")
+    assert calls == ["gemini-9-flash-lite"]          # recuerda el que funcionó
+    d = agent.diagnose()
+    assert any(t["ok"] and t["model"] == "gemini-9-flash-lite" for t in d["tests"])
+    for x in (agent._good_model, agent._thinking_ok):
+        x.clear()
+    agent._thinking_by_model.clear()
+    agent._models_cache.update(t=0.0, names=[])
