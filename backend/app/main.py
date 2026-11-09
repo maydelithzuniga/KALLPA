@@ -809,6 +809,8 @@ def _wa_process(msgs: list[dict[str, Any]]) -> None:
                         audio = whatsapp.download_media(m["media_id"])
                 except Exception as e:  # noqa: BLE001
                     log.warning("No se pudo descargar el audio de WhatsApp: %s", e)
+                    whatsapp.send_text(m["from"], "No pude descargar tu audio 😕. ¿Me lo mandas otra vez o me lo escribes?")
+                    continue
             if not text and audio is None:
                 continue
             try:
@@ -816,7 +818,15 @@ def _wa_process(msgs: list[dict[str, Any]]) -> None:
                                   channel="whatsapp", conversation=f"whatsapp:{m['from']}", occurred_at=occurred)
             except (transcribe.TranscriptionUnavailable, inbox.NotUnderstood) as e:
                 log.warning("Audio de WhatsApp no entendido: %s", e)
-                whatsapp.send_text(m["from"], "No pude escuchar bien tu audio. ¿Me lo repites o me lo escribes?")
+                why = str(e)
+                if why == "sin_ia":
+                    msg = ("Todavía no puedo escuchar audios: falta activar la IA en el servidor "
+                           "(AGENT_ENABLED=true y GEMINI_API_KEY). Mientras tanto, escríbemelo 🙏")
+                elif why.startswith("gemini:"):
+                    msg = "La IA no pudo escuchar tu audio ahora 😕. ¿Me lo mandas otra vez o me lo escribes?"
+                else:
+                    msg = "No pude escuchar bien tu audio. ¿Me lo repites más despacio o me lo escribes?"
+                whatsapp.send_text(m["from"], msg)
                 continue
             if r.get("duplicate"):
                 continue

@@ -53,6 +53,7 @@ def receive(db: Session, b: M.Business, *, message_id: str, channel: str, conver
         r["duplicate"] = True
         return r
     agent_data = None
+    agent_error = None
     via_voice = audio is not None
     if audio is not None:
         if agent.enabled():
@@ -60,9 +61,14 @@ def receive(db: Session, b: M.Business, *, message_id: str, channel: str, conver
                 agent_data = agent.analyze(db, b, audio=audio, mime_type=mime_type)
                 text = agent_data.get("transcripcion") or ""
             except agent.AgentUnavailable as e:
-                log.info("Agente no disponible para audio, uso Whisper: %s", e)
+                log.warning("La IA (Gemini) no pudo con el audio, intento Whisper: %s", e)
+                agent_error = str(e)
         if agent_data is None:
-            text = transcribe.transcribe_bytes(audio, suffix)   # puede lanzar TranscriptionUnavailable
+            try:
+                text = transcribe.transcribe_bytes(audio, suffix)   # puede lanzar TranscriptionUnavailable
+            except transcribe.TranscriptionUnavailable as e:
+                raise transcribe.TranscriptionUnavailable(
+                    f"gemini: {agent_error}" if agent_error else ("sin_ia" if not agent.enabled() else str(e))) from e
         if not (text or "").strip():
             raise NotUnderstood("No escuché bien el audio")
     elif agent.enabled() and text and not _pending(db, b, conv) and not _rules_understand(db, b, conv, channel, text):

@@ -630,3 +630,19 @@ def test_33_fiado_con_fracciones(client, veg):
     assert "S/ 1.25" in r and "½" in r and "(Carmen)" in r
     r = chat("Ana se llevó kilo y medio de papa fiado")["reply"]
     assert "S/ 3.75" in r and "(Ana)" in r
+
+
+def test_34_audio_sin_ia_explica_la_causa(client, monkeypatch):
+    """Sin IA ni Whisper en el servidor, el audio no queda en «no pude escuchar»: dice qué falta."""
+    from app import main, transcribe, whatsapp
+    from app.config import settings
+    monkeypatch.setattr(settings, "whatsapp_enabled", True)
+    monkeypatch.setattr(settings, "agent_enabled", False)
+
+    def no_whisper(*a, **k):
+        raise transcribe.TranscriptionUnavailable("whisper no instalado")
+    monkeypatch.setattr(transcribe, "transcribe_bytes", no_whisper)
+    sent = []
+    monkeypatch.setattr(whatsapp, "send_text", lambda to, body, quick=None: sent.append(body))
+    main._wa_process([{"id": "au1", "from": "51999000222", "type": "audio", "audio_bytes": b"ogg", "timestamp": None}])
+    assert "falta activar la IA" in sent[-1]
