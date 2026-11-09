@@ -32,8 +32,7 @@ Escribe cada línea **como un mensaje aparte** en el chat «Twilio Sandbox» y e
 | `efectivo` | ✓ S/ 1.50 tomate (½ kg), S/ 2 diez limones · efectivo |
 | `gasté 5 soles en bolsas` | Gasto del negocio: bolsas, S/ 5. ¿Salió del efectivo o del Yape? |
 | `yape` | ✓ gasto S/ 5 bolsas y empaques · Yape |
-| `Rosa se llevó 2 kilos de papa fiado` | ¿Por cuánto en total? (sugiere S/ 5) |
-| `5` | ✓ S/ 5 papa (2 kilos) · te debe S/ 5 (Rosa) |
+| `Rosa se llevó 2 kilos de papa fiado` | ✓ S/ 5 papa (2 kilos) · te debe S/ 5 (Rosa) |
 | `se malogró un kilo de tomate` | ✓ pérdida S/ 2 · tomate (malogrado) · lo resté de tu ganancia |
 | `en esta última hora vendí como 30 soles en efectivo` | ✓ S/ 30 ventas varias · efectivo |
 | `Rosa me pagó 5 soles` | Rosa te pagó S/ 5 del fiado. ¿Efectivo o Yape? |
@@ -60,9 +59,22 @@ Escribe cada línea **como un mensaje aparte** en el chat «Twilio Sandbox» y e
 ## 5 · Lista para cobrar (te llega a ti, no a la clienta)
 | Tú escribes | Kallpa responde |
 |---|---|
-| `Juan se llevó un kilo de cebolla fiado` | ¿Por cuánto en total? |
-| `3` | ✓ S/ 3 cebolla (1 kilo) · te debe S/ 3 (Juan) |
+| `Juan se llevó un kilo de cebolla fiado` | ✓ S/ 3 cebolla (1 kilo) · te debe S/ 3 (Juan) |
 | `a quién tengo que cobrar` | Por cobrar (S/ 3): Juan S/ 3, de hoy. |
+
+## Si vendes ropa (u otro rubro)
+| Tú escribes | Kallpa responde |
+|---|---|
+| `Vendo ropa` | ¡Qué bien! ¿Qué prendas vendes más? Dime 3 o 4 |
+| `polos, blusas y pantalones` | Anoté: polo, blusa, pantalón |
+| `eso es todo` → `por unidad` | ¿A cuánto das la unidad de polo? ¿Y a ti cuánto te cuesta? |
+| `a 25, me cuesta 12` / `a 30, me cuesta 15` / `a 50, me cuesta 28` | (una pregunta por prenda) |
+| `los polos por docena a 144, lo demás por unidad` | ¿Cuánto te queda ahorita? |
+| `20 polos, 15 blusas y 10 pantalones` → `las dos` → `tengo 100 en efectivo y 60 en yape` → `sí` | ¡Todo listo! |
+| `vendí 2 polos y una blusa por yape` | ✓ S/ 50 dos polos, S/ 30 una blusa · Yape |
+| `vendí un pantalón en efectivo` | ✓ S/ 50 un pantalón · efectivo (usa tu precio, sin preguntar) |
+| `Carmen se llevó una blusa fiado` | ✓ S/ 30 una blusa · te debe S/ 30 (Carmen) |
+| `se me perdió un polo` | ✓ pérdida S/ 12 · polo |
 
 ## 6 · Audios
 Manda un **audio** diciendo: «vendí dos kilos de papa y un kilo de cebolla en efectivo».

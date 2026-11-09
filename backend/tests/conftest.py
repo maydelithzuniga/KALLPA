@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 
 _tmp = tempfile.mkdtemp()
-os.environ["DATABASE_URL"] = f"sqlite:///{_tmp}/test.db"
+os.environ["DATABASE_URL"] = os.getenv("TEST_DATABASE_URL") or f"sqlite:///{_tmp}/test.db"
 os.environ["SEED_DEMO"] = "false"
 os.environ["GEMINI_ENABLED"] = "false"
 os.environ["WHATSAPP_ENABLED"] = "false"

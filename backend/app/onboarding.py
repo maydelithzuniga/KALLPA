@@ -30,6 +30,32 @@ GENERIC = {"vendo", "vendemos", "venta", "ventas", "verdura", "verduras", "fruta
            "sobre", "nada", "eso", "algo", "kilo", "kilos", "atado", "atados", "soles", "sol", "jaba", "saco", "bueno", "pues",
            "ya", "si", "no", "aca", "aqui", "frescas", "frescos", "variedad", "diario", "mayormente", "puro", "pura",
            "al", "mediodia", "manana", "tarde", "noche", "dia", "dias", "casa", "calle", "mercado", "esquina"}
+# Rubros: si la persona solo dice el rubro («vendo ropa»), se le pide qué cosas vende, con ejemplos de su rubro.
+CATEGORIES = [
+    (r"\b(ropa|prendas?|confecciones|vestidos|moda)\b", "prendas", "polos, blusas, pantalones, casacas"),
+    (r"\b(comida|menu|menus|almuerzos?|desayunos?|platos?|cocina|restaurante|cevicheria|polleria)\b", "platos", "menú, caldo de gallina, ceviche"),
+    (r"\b(abarrotes|bodega|tienda)\b", "productos", "arroz, azúcar, aceite, fideos"),
+    (r"\b(frutas?|fruteria)\b", "frutas", "plátano, manzana, papaya, naranja"),
+    (r"\b(verduras?|hortalizas|verduleria)\b", "verduras", "tomate, papa, cebolla, limón"),
+    (r"\b(golosinas|dulces|snacks|confiteria)\b", "golosinas", "galletas, chocolates, caramelos"),
+    (r"\b(accesorios|bisuteria|joyas|joyeria)\b", "accesorios", "aretes, collares, pulseras"),
+    (r"\b(bebidas|jugos|refrescos)\b", "bebidas", "gaseosas, agua, jugos"),
+    (r"\b(cosmeticos|maquillaje|belleza|perfumes)\b", "productos", "labiales, cremas, perfumes"),
+    (r"\b(zapatos|calzado|zapatillas)\b", "modelos", "zapatillas, sandalias, botas"),
+    (r"\b(pan|panaderia|pasteles|tortas|reposteria)\b", "productos", "pan francés, tortas, alfajores"),
+    (r"\b(utiles|libreria|papeleria)\b", "productos", "cuadernos, lapiceros, folders"),
+]
+GENERIC |= {"ropa", "prendas", "prenda", "confecciones", "moda", "comida", "comidas", "menu", "menus", "golosinas", "dulces",
+            "snacks", "accesorios", "bisuteria", "bebidas", "cosmeticos", "maquillaje", "calzado", "utiles", "libreria",
+            "bebe", "bebes", "nino", "ninos", "nina", "ninas", "dama", "damas", "varon", "varones", "hombre", "mujer",
+            "segunda", "mano", "nueva", "nuevo", "importada", "americana", "fruteria", "verduleria", "panaderia", "confiteria"}
+
+
+def category_hint(t: str) -> tuple[str, str] | None:
+    for pat, word, ex in CATEGORIES:
+        if re.search(pat, t):
+            return word, ex
+    return None
 UNIT_WORDS = [
     (r"\b(de a sol|de a 1 soles|montoncitos?|porcion(es)?|al ojo|en soles|por soles|de a soles)\b", "soles"),
     (r"\b(kilos?|kg|por kilo|el kilo)\b", "kg"),
@@ -97,9 +123,33 @@ def extract_names(text: str) -> list[str]:
     return names[:25]
 
 
+ACCENTS = {"platano": "plátano", "menu": "menú", "cafe": "café", "azucar": "azúcar", "maiz": "maíz", "aji": "ají",
+           "pure": "puré", "brocoli": "brócoli", "rabano": "rábano", "esparrago": "espárrago", "cupcake": "cupcake"}
+
+
+def _accent(name: str) -> str:
+    """Devuelve la tilde que se pierde al normalizar: «pantalon» → «pantalón», «limon» → «limón»."""
+    out = []
+    for w in name.split():
+        lw = w.lower()
+        if lw in ACCENTS:
+            fixed = ACCENTS[lw]
+        elif len(lw) > 4 and lw.endswith("on") and not lw.endswith(("ion", "gon")):
+            fixed = lw[:-2] + "ón"
+        elif len(lw) > 4 and lw.endswith("ion"):
+            fixed = lw[:-3] + "ión"
+        else:
+            fixed = lw
+        out.append(fixed[:1].upper() + fixed[1:] if w[:1].isupper() else fixed)
+    return " ".join(out)
+
+
 def _product(name: str) -> dict[str, Any]:
+    from .textutil import pluralize
+    name = _accent(name)
     n = nlu.normalize(name)
-    return {"name": name, "aliases": sorted({n, n + "s", nlu.singular(n)}), "vende_por": [], "compra_por": {}, "base": None}
+    return {"name": name, "aliases": sorted({n, n + "s", nlu.singular(n), nlu.normalize(pluralize(name))}),
+            "vende_por": [], "compra_por": {}, "base": None}
 
 
 def _find(doc: dict[str, Any], t: str) -> list[int]:
@@ -256,8 +306,9 @@ class Onboarding:
         self.b.description = raw if not self.b.description else self.b.description
         names = extract_names(raw)
         if not names:
-            q = "¿Qué verduras vendes más? Dime las principales, por ejemplo «tomate, papa, cebolla»." if d["kind"] == "verduras" \
-                else "¿Qué es lo que más vendes? Dime 3 o 4 cosas."
+            hint = category_hint(nlu.normalize(raw))
+            q = (f"¡Qué bien! ¿Qué {hint[0]} vendes más? Dime 3 o 4, por ejemplo «{hint[1]}»." if hint
+                 else "¿Qué es lo que más vendes? Dime 3 o 4 cosas, separadas por comas.")
             d["stage"] = "vende"
             return self.reply(q)
         d["products"] = [_product(n) for n in names]
@@ -373,7 +424,9 @@ class Onboarding:
             if not us:
                 continue
             unit = next((u for u in us if u in PACKS), us[0])
-            m_eq = re.search(r"(?:de|trae|con)\s+(\d+(?:\.\d+)?)\s*(kilos?|kg|unidades)", seg)
+            m_eq = re.search(r"(?:de|trae|con|por)\s+(\d+(?:\.\d+)?)\s*(kilos?|kg|unidades)", seg)
+            if m_eq and m_eq.group(2) == "unidades" and float(m_eq.group(1)) > 1 and unit == "unidad":
+                unit = "docena" if float(m_eq.group(1)) == 12 else "paquete"   # «por docena» llega como «por 12 unidades»
             money = [a for a in _money(re.sub(r"(\d+(?:\.\d+)?)\s*(kilos?|kg|unidades)", " ", seg))]
             info = {"unidad": unit}
             if m_eq:

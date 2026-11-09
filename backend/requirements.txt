@@ -8,3 +8,4 @@ tzdata>=2024.1
 # Transcripción local (opcional pero recomendada para la demo por voz)
 faster-whisper>=1.0
 edge-tts>=6.1
+psycopg[binary]>=3.2

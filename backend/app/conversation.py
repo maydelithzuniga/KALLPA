@@ -628,6 +628,11 @@ class Engine:
                     data["total_cents"] = data["paid_cents"] + data["pending_cents"]
                 elif k == M.SALE and data.get("fully_credit") and data.get("pending_cents"):
                     data["total_cents"] = data["pending_cents"]
+                elif k == M.SALE and ref_unit and qty:
+                    # No dijo el monto pero sabemos su precio: se guarda al toque con el precio de siempre
+                    # (si cobró distinto, dice «corrige» o «deshacer»).
+                    data["total_cents"] = round(ref_unit * qty)
+                    data["price_from_list"] = True
                 else:
                     d.data = data
                     hint = []

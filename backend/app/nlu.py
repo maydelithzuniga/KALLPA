@@ -348,7 +348,9 @@ def find_day(t: str, today: date) -> date | None:
 
 NAME_STOP = STOP | {"senora", "senor", "sra", "sr", "don", "dona", "vecina", "vecino", "tia", "tio",
                     "amiga", "amigo", "cliente", "casera", "casero", "cuenta", "fiado", "debe",
-                    "mitad", "resto", "casa", "proveedor", "proveedora", "banco", "caja"}
+                    "mitad", "resto", "casa", "proveedor", "proveedora", "banco", "caja", "quien", "quienes",
+                    "tengo", "cobrar", "todo", "todos", "nadie", "alguien", "efectivo", "yape", "plin", "kilos", "kilo",
+                    "soles", "sol", "unidades", "ella", "solo", "tambien", "ahora", "recien", "ayer", "hoy"}
 
 
 def find_person(t: str) -> str | None:
@@ -361,6 +363,7 @@ def find_person(t: str) -> str | None:
         r"\ba ([a-zñ]{3,})(?= me debe| le fie| fiado| le quedo| quedo debiendo)",
         r"\bde ([a-zñ]{3,})(?= me debe| quedo debiendo| le quedo)",
         r"^([a-zñ]{3,}) me (?:pago|pagó|debe|devolvio|yapeo|cancelo)",
+        r"\b([a-zñ]{3,}) me (?:pago|debe|quedo debiendo|yapeo)\b",
         r"\b(?:cobre|cobré) (?:a |el fiado de |lo de |la deuda de )(?:la |el )?([a-zñ]{3,})",
         r"\bfiado de (?:la |el )?(?:senora |senor |don |dona )?([a-zñ]{3,})",
     ]
@@ -556,7 +559,7 @@ def parse(text: str, products: list[ProductRef], today: date) -> Parsed:
     if _has(t, r"^(ayer |hoy |el \w+ |en (esta|la) \w+ \w+ |en la (manana|tarde) |hasta ahora )?(vendi|vendimos|me compraron)\b") \
             or _has(t, r"^(en (esta|la) ultima hora|en la manana|en la tarde|hasta ahora|en lo que va)\b.*\bvend"):
         p.intent = "movimiento"
-        items = parse_sale_items(t, products)
+        items = parse_sale_items(t, products) if not _has(t, r"\b(fiado|fie|me debe)\b") else None
         if items:
             p.fields.update({"kind": "ventas", **items})
             return p

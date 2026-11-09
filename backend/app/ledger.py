@@ -232,12 +232,14 @@ def link_yape(db: Session, business: M.Business, mv: M.Movement) -> M.YapePaymen
         return None
     start = mv.occurred_at - timedelta(hours=12)
     end = mv.occurred_at + timedelta(hours=12)
-    pay = db.scalar(select(M.YapePayment).where(
+    cands = db.scalars(select(M.YapePayment).where(
         M.YapePayment.business_id == business.id, M.YapePayment.movement_id.is_(None),
         M.YapePayment.direction == direction,
         M.YapePayment.amount_cents == mv.paid_cents,
         M.YapePayment.received_at >= start, M.YapePayment.received_at <= end,
-    ).order_by(func.abs(func.julianday(M.YapePayment.received_at) - func.julianday(mv.occurred_at))))
+    )).all()
+    # el más cercano en el tiempo (en Python: funciona igual en SQLite y PostgreSQL)
+    pay = min(cands, key=lambda p: abs((p.received_at - mv.occurred_at).total_seconds())) if cands else None
     if pay:
         pay.movement_id = mv.id
         mv.origin = "respaldo_yape"

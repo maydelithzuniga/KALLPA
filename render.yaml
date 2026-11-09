@@ -9,6 +9,10 @@ services:
     startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
     envVars:
+      - key: DATABASE_URL          # PostgreSQL: los datos NO se borran al reiniciar
+        fromDatabase:
+          name: kallpa-db
+          property: connectionString
       - key: PYTHON_VERSION
         value: 3.12.7
       - key: NODE_VERSION
@@ -45,3 +49,9 @@ services:
         value: "false"
       - key: GEMINI_API_KEY
         sync: false
+
+databases:
+  - name: kallpa-db
+    plan: free
+    databaseName: kallpa
+    user: kallpa

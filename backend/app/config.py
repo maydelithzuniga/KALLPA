@@ -23,13 +23,21 @@ def _load_dotenv() -> None:
 _load_dotenv()
 
 
+def _db_url(url: str) -> str:
+    """Render/Heroku dan «postgres://…»: SQLAlchemy necesita el driver explícito (psycopg 3)."""
+    for pre in ("postgres://", "postgresql://"):
+        if url.startswith(pre):
+            return "postgresql+psycopg://" + url[len(pre):]
+    return url
+
+
 def _bool(name: str, default: bool) -> bool:
     return os.getenv(name, str(default)).strip().lower() in {"1", "true", "yes", "si", "sí"}
 
 
 @dataclass
 class Settings:
-    database_url: str = field(default_factory=lambda: os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'kallpa.db'}"))
+    database_url: str = field(default_factory=lambda: _db_url(os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'kallpa.db'}")))
     seed_demo: bool = field(default_factory=lambda: _bool("SEED_DEMO", True))
     notify_auto: bool = field(default_factory=lambda: _bool("NOTIFY_AUTO", True))   # resúmenes y alertas automáticos
     whisper_model: str = field(default_factory=lambda: os.getenv("WHISPER_MODEL", "base"))
