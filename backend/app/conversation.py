@@ -37,6 +37,10 @@ def qty_name(qty: int | None, name: str) -> str:
     if qty == 1:
         art = "una" if name.split()[0].endswith("a") else "un"
         return f"{art} {name}"
+    if not float(qty).is_integer():   # «0.5 tomate» → «½ tomate»
+        from . import units
+        return f"{units.fmt_qty(qty)} {name}"
+    qty = int(qty)
     q = NUM_WORDS[qty] if qty <= 20 else str(qty)
     return f"{q} {pluralize(name)}"
 
@@ -811,7 +815,9 @@ class Engine:
         if k == M.EXPENSE:
             return f"Gasto del negocio: {data.get('category', 'gasto').lower()}, {soles(amt)}{_m(data.get('method'))}.{q}"
         if k == M.WITHDRAWAL:
-            return f"Retiro para la casa ({data.get('description', 'casa')}): {soles(amt)}{_m(data.get('method'))}. No cuenta como gasto del negocio.{q}"
+            desc = (data.get("description") or "").strip()
+            extra = f" ({desc})" if desc and desc.lower() not in ("casa", "la casa", "para la casa") else ""
+            return f"Para la casa{extra}: {soles(amt)}{_m(data.get('method'))}. No cuenta como gasto del negocio.{q}"
         if k == M.CONTRIBUTION:
             return f"Aporte de tu plata al negocio: {soles(amt)}{_m(data.get('method'))}. No cuenta como venta.{q}"
         if k == M.TRANSFER:
@@ -1366,7 +1372,15 @@ class Engine:
                                                        M.Movement.kind.not_in((M.OPENING, M.LOSS))).order_by(M.Movement.created_at.desc(), M.Movement.id.desc()))
 
     def start_correction(self, p: nlu.Parsed) -> dict[str, Any]:
-        mv = self.last_movement()
+        mv = None
+        cands = p.fields.get("product_candidates") or []
+        if len(cands) == 1:   # «corrige, el tomate fue 4»: la última venta/compra de ESE producto, no la última en general
+            mv = self.db.scalar(select(M.Movement).where(
+                M.Movement.business_id == self.b.id, M.Movement.status == "confirmado", M.Movement.product_id == cands[0],
+                M.Movement.kind.in_((M.SALE, M.PURCHASE, M.LOSS))).order_by(M.Movement.created_at.desc(), M.Movement.id.desc()))
+            if mv:
+                p.fields = {k: v for k, v in p.fields.items() if k != "product_candidates"}
+        mv = mv or self.last_movement()
         if not mv:
             return self.resp("No encontré un movimiento para corregir.")
         d = self.new_draft("correccion", {"movement_id": mv.id, "changes": self._changes(mv, p.fields)})
@@ -1499,6 +1513,8 @@ def measure_txt(measure: float | None, unit: str | None) -> str:
     frac = {0.25: "¼", 0.5: "½", 0.75: "¾"}
     n = frac.get(measure) or (str(int(measure)) if float(measure).is_integer() else f"{measure:g}")
     u = {"kg": "kg", "unidad": "", None: ""}.get(unit, unit or "")
+    if u and u != "kg" and measure > 1:
+        u = units.unit_name(unit, measure)   # «2 atados», «3 jabas»
     return f"{n} {u}".strip()
 
 

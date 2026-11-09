@@ -440,7 +440,7 @@ def fake_agent(monkeypatch):
                         "respuesta_voz": "¡Bien! Registré tu venta."},
         "gasté quince en pasajes": {"transcripcion": "gasté quince en pasajes",
                                    "intent": {"tipo": "gasto", "monto": 15, "metodo_pago": None, "descripcion": "pasajes"}, "respuesta_voz": ""},
-        "¿cómo voy este mes?": {"transcripcion": "¿cómo voy este mes?", "intent": {"tipo": "consulta"},
+        "¿me conviene abrir los domingos?": {"transcripcion": "¿me conviene abrir los domingos?", "intent": {"tipo": "consulta"},
                                "respuesta_voz": "Vas muy bien, Ana: este mes llevas S/ 40 en ventas."},
     }
     calls = []
@@ -461,8 +461,8 @@ def test_15_agente_en_chat_de_la_app_texto_y_audio(client, shop, fake_agent):
     r = client.post(f"/api/businesses/{bid}/chat", json={"text": "gasté quince en pasajes", "message_id": "ag-2"}).json()
     assert r["reply"] == "Gasto del negocio: movilidad y fletes, S/ 15. ¿Salió del efectivo o del Yape?"
     r = client.post(f"/api/businesses/{bid}/chat", json={"text": "efectivo", "message_id": "ag-3"}).json()   # pregunta abierta: sin IA
-    assert r["movement"]["amount_cents"] == 1500 and fake_agent == ["audio", "gasté quince en pasajes"]
-    r = client.post(f"/api/businesses/{bid}/chat", json={"text": "¿cómo voy este mes?", "message_id": "ag-4"}).json()
+    assert r["movement"]["amount_cents"] == 1500 and fake_agent == ["audio"]   # lo escrito que entienden las reglas no usa IA
+    r = client.post(f"/api/businesses/{bid}/chat", json={"text": "¿me conviene abrir los domingos?", "message_id": "ag-4"}).json()
     assert r["reply"].startswith("Vas muy bien")
 
 
@@ -578,3 +578,55 @@ def test_30_explicaciones_con_sus_numeros_y_gastos_fijos(chat):
     assert "S/ 250 al mes" in chat("qué es el punto de equilibrio")["reply"]
     assert "semana" in chat("qué es la rotación")["reply"]   # con pocos días no inventa «238 días»
     assert "S/ 40" in chat("qué es la ganancia")["reply"] or "ganaste" in chat("qué es la ganancia")["reply"]
+
+
+def test_31_corregir_el_producto_nombrado_y_compra_no_es_gasto(chat):
+    """«corrige, el polo fue 30» corrige la última venta de ESE producto; comprar mercadería no baja la ganancia."""
+    chat("vendí un polo en efectivo")
+    chat("vendí una docena de polos")
+    chat("efectivo")
+    chat("gasté 5 en bolsas en efectivo")
+    r = chat("corrige, el polo fue 30")["reply"]
+    assert "S/ 30" in r
+    d0 = chat("resumen")["reply"]
+    chat("compré 12 polos a 144 en efectivo")
+    d1 = chat("resumen")["reply"]
+    gan = lambda t: t.split("Ganancia del día: ")[1].split(".")[0]
+    assert gan(d0) == gan(d1) and "Compraste mercadería por S/ 144" in d1 and "Gastaste S/ 5 del negocio" in d1
+
+
+def test_32_empezar_de_nuevo_por_whatsapp(client, monkeypatch):
+    """«empezar de nuevo» pide confirmación; solo «sí, borrar todo» borra el negocio de ese número."""
+    from app import main, whatsapp
+    from app.config import settings
+    from app.db import SessionLocal
+    from app import models as M
+    monkeypatch.setattr(settings, "whatsapp_enabled", True)
+    sent = []
+    monkeypatch.setattr(whatsapp, "send_text", lambda to, body, quick=None: sent.append(body))
+    n = [0]
+
+    def wa(t):
+        n[0] += 1
+        main._wa_process([{"id": f"r{n[0]}", "from": "51999000111", "type": "text", "text": t, "timestamp": None}])
+        return sent[-1]
+    assert "¿Cómo te llamas?" in wa("hola")
+    wa("Juana")
+    assert "Esto borra TODO" in wa("empezar de nuevo")
+    wa("verduras: tomate y papa")                        # otra cosa: no borra, sigue la conversación
+    from sqlalchemy import select
+    with SessionLocal() as db:
+        assert db.scalar(select(M.Business).where(M.Business.phone == "51999000111")).owner_name == "Juana"
+    wa("empezar de nuevo")
+    assert wa("sí, borrar todo").startswith("Listo, borré todo")
+    assert "¿Cómo te llamas?" in wa("hola")
+
+
+def test_33_fiado_con_fracciones(client, veg):
+    """«medio kilo … fiado» es ½ kg (no 5 kg) y nunca deja a la persona sin respuesta."""
+    from tests.conftest import Chat
+    chat = Chat(client, veg)
+    r = chat("la señora Carmen se llevó medio kilo de papa fiado")["reply"]
+    assert "S/ 1.25" in r and "½" in r and "(Carmen)" in r
+    r = chat("Ana se llevó kilo y medio de papa fiado")["reply"]
+    assert "S/ 3.75" in r and "(Ana)" in r

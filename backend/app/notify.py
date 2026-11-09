@@ -125,7 +125,8 @@ def daily_text(db: Session, b: M.Business, d: date | None = None) -> str:
         parts.append(f"Perdiste {soles(st['loss_cents'])} en mercadería o cosas malogradas.")
     g = _main_goal(db, b)
     if g and g.get("progress_pct") is not None:
-        parts.append(f"Vas al {g['progress_pct']}% de tu {g['name'].lower()}.")
+        nm = g["name"].lower()
+        parts.append(f"Vas al {g['progress_pct']}% de tu meta" + ("" if nm in ("mi meta", "meta") else f" «{g['name']}»") + ".")
     low = _stock_low(db, b)
     if low:
         i = low[0]

@@ -91,7 +91,7 @@ def period_stats(db: Session, business: M.Business, start: date, end_exclusive: 
             st["collected_by_method"][mv.method] += mv.amount_cents
         elif k == M.PURCHASE:
             st["purchases_cents"] += mv.paid_cents
-            tracked = mv.product is not None and mv.product.track_stock and mv.quantity
+            tracked = mv.product is not None and mv.product.track_stock and (mv.quantity or mv.measure)
             if not tracked:
                 st["non_inventory_purchases_cents"] += mv.amount_cents
         elif k == M.EXPENSE:

@@ -202,10 +202,15 @@ MONEY_PRECEDERS = {"a", "por", "de", "en", "pague", "pagaron", "gaste", "cobre",
                    "vendo", "compro", "necesito", "juntar", "cuota", "unos", "pagar", "sale", "salio", "salen", "cuestan", "valen", "gasto"}
 
 
-def find_quantity(t: str, product_spans: list[tuple[int, int]] | None = None) -> tuple[int | None, tuple[int, int] | None]:
-    """Cantidad = número seguido de unidad o de un producto."""
+def _qty(x: str) -> int | float:
+    v = float(x)
+    return int(v) if v.is_integer() else v
+
+
+def find_quantity(t: str, product_spans: list[tuple[int, int]] | None = None) -> tuple[int | float | None, tuple[int, int] | None]:
+    """Cantidad = número seguido de unidad o de un producto («0.5 kilos» = medio kilo, no 5)."""
     spans = product_spans or []
-    for m in re.finditer(r"\b(\d+)\b", t):
+    for m in re.finditer(r"(?<![\d.])(\d+(?:\.\d+)?)\b", t):
         after = t[m.end():].lstrip()
         nxt = after.split(" ")[0] if after else ""
         if t[max(0, m.start() - 3):m.start()].strip().endswith("s/"):
@@ -213,11 +218,11 @@ def find_quantity(t: str, product_spans: list[tuple[int, int]] | None = None) ->
         if re.match(MONEY_SUFFIX + r"\b", after):
             continue
         if nxt in UNIT_WORDS:
-            return int(m.group(1)), (m.start(), m.end())
+            return _qty(m.group(1)), (m.start(), m.end())
         for (ps, _pe) in spans:
             gap = t[m.end():ps]
             if 0 <= ps - m.end() <= 12 and re.fullmatch(r"\s*(?:de |del |de la |de los )?\s*", gap or " "):
-                return int(m.group(1)), (m.start(), m.end())
+                return _qty(m.group(1)), (m.start(), m.end())
     return None, None
 
 

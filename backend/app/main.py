@@ -1,6 +1,8 @@
 """API FastAPI: chat web y WhatsApp unificados, panel, inventario, metas, conciliación y reporte."""
 from __future__ import annotations
 
+import re
+
 import logging
 import uuid
 from datetime import date, datetime
@@ -758,6 +760,27 @@ def _wa_business(db: Session, phone: str) -> M.Business:
     return b
 
 
+_RESET_PENDING: dict[str, datetime] = {}
+
+
+def _reset_command(db: Session, b: M.Business, phone: str, text: str | None) -> str | None:
+    """«empezar de nuevo» → pide confirmación; «sí, borrar todo» (en 5 min) → borra el negocio de ese número.
+    Sirve para ensayar la demo y para quien se equivocó en la primera conversación."""
+    from .nlu import normalize
+    from .seed import delete_business
+    t = normalize(text or "")
+    if re.match(r"^(empezar de nuevo|empezar desde cero|reiniciar|borrar todo|borrar mi negocio|resetear)\b", t):
+        _RESET_PENDING[phone] = datetime.now()
+        return ("⚠️ Esto borra TODO lo de tu negocio: productos, ventas, gastos y fiados. No se puede recuperar. "
+                "Si estás segura, escribe «sí, borrar todo». Si no, escribe cualquier otra cosa.")
+    asked = _RESET_PENDING.pop(phone, None)
+    if asked and (datetime.now() - asked).total_seconds() < 300 and re.match(r"^si,? borrar todo\b", t):
+        delete_business(db, b)
+        db.commit()
+        return "Listo, borré todo. Escribe «hola» para empezar de nuevo. 👋"
+    return None
+
+
 def _wa_process(msgs: list[dict[str, Any]]) -> None:
     with SessionLocal() as db:
         for m in msgs:
@@ -770,6 +793,10 @@ def _wa_process(msgs: list[dict[str, Any]]) -> None:
             occurred = datetime.fromtimestamp(int(m["timestamp"]), tz=__import__("zoneinfo").ZoneInfo("America/Lima")).replace(tzinfo=None) \
                 if m.get("timestamp") else None
             text = m.get("text")
+            reset = _reset_command(db, b, m["from"], text)
+            if reset:
+                whatsapp.send_text(m["from"], reset)
+                continue
             audio = None
             if m.get("audio_bytes") is not None:
                 audio = m["audio_bytes"]
@@ -833,8 +860,10 @@ async def twilio_receive(request: Request, background: BackgroundTasks):
             twilio_wa.collect_start()
             try:
                 _wa_process([m])
-            finally:
-                return twilio_wa.collect_end()
+            except Exception:   # nunca dejar a la persona sin respuesta
+                log.exception("Error procesando mensaje de Twilio")
+                twilio_wa.send(m["from"], body="Uy, tuve un problema con ese mensaje 😕. ¿Me lo repites con otras palabras?")
+            return twilio_wa.collect_end()
         from starlette.concurrency import run_in_threadpool
         items = await run_in_threadpool(run)
     return Response(content=twilio_wa.twiml(items), media_type="application/xml")

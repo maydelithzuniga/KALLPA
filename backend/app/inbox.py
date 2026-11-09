@@ -34,6 +34,15 @@ def _pending(db: Session, b: M.Business, conversation: str) -> bool:
                                               M.Draft.status == "abierto")) is not None
 
 
+def _rules_understand(db: Session, b: M.Business, conv: str, channel: str, text: str) -> bool:
+    """Lo escrito lo entienden primero las reglas (rápido, probado y sin costo); la IA solo entra si no lo entienden.
+    Los audios siempre van a la IA (que además transcribe)."""
+    from .conversation import Engine
+    from .nlu import parse
+    eng = Engine(db, b, conv, channel)
+    return parse(text, eng.products(), eng.today).intent not in ("desconocido", "valor", "")
+
+
 def receive(db: Session, b: M.Business, *, message_id: str, channel: str, conversation: str | None = None,
             text: str | None = None, audio: bytes | None = None, mime_type: str = "audio/ogg", suffix: str = ".ogg",
             op_id: str | None = None, occurred_at: datetime | None = None) -> dict[str, Any]:
@@ -56,7 +65,7 @@ def receive(db: Session, b: M.Business, *, message_id: str, channel: str, conver
             text = transcribe.transcribe_bytes(audio, suffix)   # puede lanzar TranscriptionUnavailable
         if not (text or "").strip():
             raise NotUnderstood("No escuché bien el audio")
-    elif agent.enabled() and text and not _pending(db, b, conv):
+    elif agent.enabled() and text and not _pending(db, b, conv) and not _rules_understand(db, b, conv, channel, text):
         try:
             agent_data = agent.analyze(db, b, text=text)
         except agent.AgentUnavailable as e:

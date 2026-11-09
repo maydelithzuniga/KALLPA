@@ -467,7 +467,7 @@ def reset_demo(db: Session) -> None:
 def delete_business(db: Session, b: M.Business) -> None:
     bid = b.id
     for model in (M.CashEntry, M.StockEntry, M.YapePayment, M.Count, M.Draft, M.ChatLog, M.ReportConsent,
-                  M.FixedExpense, M.Asset, M.Category):
+                  M.FixedExpense, M.Asset, M.Category, M.Notification):
         for row in db.scalars(select(model).where(model.business_id == bid)).all():
             db.delete(row)
     db.flush()
@@ -487,6 +487,8 @@ def delete_business(db: Session, b: M.Business) -> None:
         for row in db.scalars(select(model).where(model.business_id == bid)).all():
             db.delete(row)
     for row in db.scalars(select(M.ProcessedMessage).where(M.ProcessedMessage.business_id == bid)).all():
+        db.delete(row)
+    for row in db.scalars(select(M.Product).where(M.Product.business_id == bid)).all():
         db.delete(row)
     db.flush()
     db.delete(b)

@@ -41,7 +41,10 @@ def daily(db: Session, b: M.Business, d: date | None = None) -> str:
     txt = f"Tu día, {fmt_day(d)}: vendiste {soles(st['sales_cents'])}{_methods(st)}."
     if st["collections_cents"]:
         txt += f" Te pagaron {soles(st['collections_cents'])} de fiados."
-    txt += f" Gastaste {soles(gasto)} del negocio."
+    if st["purchases_cents"]:
+        txt += f" Compraste mercadería por {soles(st['purchases_cents'])}."
+    if st["expenses_cents"]:
+        txt += f" Gastaste {soles(st['expenses_cents'])} del negocio."
     txt += f" Ganancia del día: {soles(st['profit_cents'])}{' (aprox., falta algún costo)' if st['profit_estimated'] else ''}."
     if st["withdrawals_cents"]:
         txt += f" Sacaste {soles(st['withdrawals_cents'])} para la casa."
@@ -63,8 +66,9 @@ def weekly(db: Session, b: M.Business) -> str:
     today = today_lima()
     ws = metrics.week_start(today)
     st = metrics.period_stats(db, b, ws, today + timedelta(days=1))
-    txt = (f"Esta semana vendiste {soles(st['sales_cents'])}{_methods(st)}. Gastaste {soles(st['business_outflow_cents'])} "
-           f"del negocio y ganaste {soles(st['profit_cents'])}.")
+    txt = (f"Esta semana vendiste {soles(st['sales_cents'])}{_methods(st)}. "
+           + (f"Compraste mercadería por {soles(st['purchases_cents'])}. " if st["purchases_cents"] else "")
+           + f"Gastaste {soles(st['expenses_cents'])} del negocio y ganaste {soles(st['profit_cents'])}.")
     if st["withdrawals_cents"]:
         txt += f" Para la casa sacaste {soles(st['withdrawals_cents'])}."
     wp = metrics.weekday_pattern(db, b)
@@ -100,7 +104,10 @@ def explain(db: Session, b: M.Business, topic: str) -> str:
         return (f"Es la plata que de verdad tienes en la mano para usar. Esta semana vendiste {soles(st['sales_cents'])}, "
                 f"pero {soles(st['new_credit_cents'])} te los deben de fiado y pagaste {soles(st['business_outflow_cents'])} "
                 f"en compras y gastos{(' y sacaste ' + soles(st['withdrawals_cents']) + ' para la casa') if st['withdrawals_cents'] else ''}. "
-                f"Así que para usar te quedaron {soles(usable)}, no {soles(st['sales_cents'])}.")
+                + (f"Así que para usar te quedaron {soles(usable)}, no {soles(st['sales_cents'])}." if usable >= 0 else
+                   f"Así que salió más plata de la que entró: {soles(-usable)} menos. "
+                   + (f"Es normal si compraste mercadería ({soles(st['purchases_cents'])}): esa plata vuelve cuando la vendas."
+                      if st["purchases_cents"] else "Revisa tus gastos.")))
     if topic == "ganancia":
         return (f"Es lo que te queda después de pagar lo que te costó lo que vendiste y los gastos del negocio. "
                 f"Esta semana vendiste {soles(st['sales_cents'])}, la mercadería vendida te costó {soles(st['cogs_cents'])} "
@@ -198,7 +205,8 @@ def help_text(db: Session, b: M.Business) -> str:
         from . import units
         a = prods[0].name.lower()
         u = units.base_unit(prods[0])
-        venta = f"vendí 2 kilos de {a} en efectivo" if u == "kg" else f"vendí 3 {a} por Yape"
+        from .textutil import pluralize
+        venta = f"vendí 2 kilos de {a} en efectivo" if u == "kg" else f"vendí 3 {pluralize(a)} por Yape"
         b2 = prods[1].name.lower() if len(prods) > 1 else a
         return (f"Puedes decirme cosas como: «{venta}», «gasté 5 en bolsas», «se malogró un kilo de {b2}», "
                 f"«Rosa se llevó 2 kilos de {b2} fiado», «Rosa me pagó 5», «¿cuánto {a} me queda?», "
