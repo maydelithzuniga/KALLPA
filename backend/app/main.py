@@ -652,6 +652,28 @@ def get_report(business_id: int, start: date | None = None, end: date | None = N
     return report.build_bcp(db, biz(db, business_id), start, end)
 
 
+@app.get("/api/businesses/{business_id}/report/pdf")
+def get_report_pdf(business_id: int, start: date | None = None, end: date | None = None, db: Session = Depends(get_db)):
+    """Informe financiero formal en PDF (el mismo que se envía al banco)."""
+    from . import report_pdf
+    b = biz(db, business_id)
+    pdf = report_pdf.build_pdf(db, b, start, end)
+    import unicodedata
+    plain = unicodedata.normalize("NFKD", b.name or "negocio").encode("ascii", "ignore").decode()
+    safe = "".join(ch for ch in plain if ch.isalnum() or ch in " -_").strip().replace(" ", "_") or "negocio"
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="Informe_financiero_{safe}.pdf"'})
+
+
+@app.get("/api/businesses/{business_id}/report/movimientos.csv")
+def get_report_csv(business_id: int, start: date | None = None, end: date | None = None, db: Session = Depends(get_db)):
+    """Detalle completo de movimientos verificados (anexo del informe)."""
+    from . import report_pdf
+    csv = report_pdf.movements_csv(db, biz(db, business_id), start, end)
+    return Response(content=csv.encode("utf-8-sig"), media_type="text/csv",
+                    headers={"Content-Disposition": 'attachment; filename="movimientos_verificados.csv"'})
+
+
 @app.get("/api/businesses/{business_id}/report/full")
 def get_report_full(business_id: int, start: date | None = None, end: date | None = None, db: Session = Depends(get_db)):
     """Reporte interno completo (efectivo y Yape, conciliación, descuentos). No se envía al banco."""
@@ -833,6 +855,8 @@ def _wa_process(msgs: list[dict[str, Any]]) -> None:
             heard = r.get("transcript")
             reply = (f"🎙️ «{heard}»\n" if heard else "") + r["reply"]
             whatsapp.send_text(m["from"], reply, r.get("quick_replies") or None)
+            if r.get("media_url"):
+                whatsapp.send_document(m["from"], r["media_url"])
             if audio is not None:
                 whatsapp.send_voice_reply(m["from"], r["reply"], mid)
 

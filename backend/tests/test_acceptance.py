@@ -719,3 +719,30 @@ def test_36_gemini_transcribe_rapido_y_con_respaldo(client, monkeypatch):
     main._wa_process([{"id": "slow1", "from": "51999000333", "type": "audio", "audio_bytes": b"ogg", "timestamp": None}])
     assert "La IA no pudo escuchar tu audio" in sent[-1]
     agent._thinking_ok.clear()
+
+
+def test_37_informe_formal_pdf_y_por_whatsapp(client, monkeypatch):
+    """Informe formal en PDF (solo Yape verificado), CSV con el detalle y envío del PDF por WhatsApp."""
+    from app import report_pdf, twilio_wa
+    from app.config import settings
+    from app.db import SessionLocal
+    from app.seed import seed_all
+    from app import models as M
+    with SessionLocal() as db:
+        seed_all(db)
+        bs = db.query(M.Business).all()
+        for b in bs:
+            a = report_pdf.analyze(db, b)
+            assert a["code"].startswith("KAL-") and len(a["indicators"]) == 8 and a["profile"]
+            assert a["available_installment_cents"] == max(0, (a["capacity"]["suggested_max_installment_cents"] or 0)
+                                                           - (a["capacity"]["current_installments_cents"] or 0))
+        bid, phone, n_mov = bs[0].id, bs[0].phone, len(report_pdf.build_bcp(db, bs[0])["movements"])
+    r = client.get(f"/api/businesses/{bid}/report/pdf")
+    assert r.status_code == 200 and r.content[:4] == b"%PDF" and r.headers["content-type"] == "application/pdf"
+    csv = client.get(f"/api/businesses/{bid}/report/movimientos.csv").content.decode("utf-8-sig")
+    assert csv.startswith("fecha,tipo,sentido") and len(csv.strip().split("\n")) == n_mov + 1
+    for k, v in {"whatsapp_enabled": True, "whatsapp_provider": "twilio", "twilio_account_sid": "AC", "twilio_auth_token": "t",
+                 "twilio_validate": False, "app_base_url": "https://kallpa.test"}.items():
+        monkeypatch.setattr(settings, k, v)
+    r = client.post("/webhook/twilio", data={"MessageSid": "SMinf", "From": f"whatsapp:+{phone}", "Body": "informe", "NumMedia": "0"})
+    assert "Tu informe financiero" in r.text and f"<Media>https://kallpa.test/api/businesses/{bid}/report/pdf</Media>" in r.text

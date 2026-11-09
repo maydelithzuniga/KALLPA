@@ -148,6 +148,23 @@ def send_voice_reply(to: str, text: str, message_id: str) -> None:
         log.error("No se pudo enviar el audio: %s", e)
 
 
+def send_document(to: str, url: str, filename: str = "Informe_financiero.pdf") -> None:
+    """Manda un PDF (el informe) como archivo adjunto en el chat."""
+    if _bridge():
+        bridge_queue(to, f"📄 Descarga tu informe: {url}")
+        return
+    if _twilio():
+        from . import twilio_wa
+        twilio_wa.send(to, media_url=url)
+        return
+    base = f"{GRAPH}/{settings.whatsapp_graph_version}/{settings.whatsapp_phone_number_id}/messages"
+    payload = {"messaging_product": "whatsapp", "to": to, "type": "document", "document": {"link": url, "filename": filename}}
+    try:
+        httpx.post(base, json=payload, headers=_headers(), timeout=20).raise_for_status()
+    except httpx.HTTPError as e:
+        log.error("No se pudo enviar el documento: %s", e)
+
+
 def send_template(to: str, template_name: str, parameters: list[str], language_code: str = "es") -> bool:
     """Plantillas de utilidad (send_whatsapp_utility_template de Women2): para escribirle primero, fuera de las 24 h."""
     if _bridge():

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Ctx } from '../App'
-import { fmtDate, get, send, soles } from '../lib/api'
+import { apiBase, fmtDate, get, send, soles } from '../lib/api'
 import { Columns } from '../components/charts'
 import { isBrowserDemo } from '../lib/browserBackend'
 
@@ -60,10 +60,20 @@ export default function Report({ ctx }: { ctx: Ctx }) {
           {[['mes', 'Este mes'], ['prev', 'Mes pasado'], ['3m', '3 meses'], ['6m', '6 meses']].map(([k, l]) =>
             <button key={k} className={period === k ? 'on' : ''} onClick={() => setPeriod(k)}>{l}</button>)}
         </div>
-        {!isBrowserDemo() && (
-          <button className="btn block" style={{ marginBottom: 14 }} disabled={!r || r.error}
-            onClick={() => { setShowAll(true); setTimeout(() => window.print(), 150) }}>Descargar PDF</button>
-        )}
+        {!isBrowserDemo() && (() => {
+          const { start, end } = range(period)
+          const q = `start=${start}&end=${end}`
+          return (
+            <div className="grid2" style={{ marginBottom: 14 }}>
+              <a className={`btn${!r || r.error ? ' disabled' : ''}`} href={`${apiBase()}/api/businesses/${bid}/report/pdf?${q}`} target="_blank" rel="noreferrer">
+                📄 Informe formal para el banco (PDF)
+              </a>
+              <a className="btn ghost" href={`${apiBase()}/api/businesses/${bid}/report/movimientos.csv?${q}`} target="_blank" rel="noreferrer">
+                Detalle completo (Excel/CSV)
+              </a>
+            </div>
+          )
+        })()}
         {r && !r.error && r.verification.pending > 0 && (
           <div className="banner warn">{r.verification.pending} movimientos por Yape aún no se verifican y no entran al informe. Puedes verlos en Historial.</div>
         )}

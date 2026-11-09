@@ -371,7 +371,19 @@ class Engine:
         if intent == "inventario":
             return self.resp(summaries.inventory_text(db, b, text))
         if intent == "informe":
-            return self.resp("Tu informe para el banco está en la app, en «Reporte». Lo revisas y decides si lo descargas y lo presentas.")
+            from .config import settings
+            from .report_pdf import analyze
+            try:
+                a = analyze(db, b)
+                resumen = (f"Ingreso mensual promedio verificado: {soles(a['capacity']['avg_income_cents'] or 0)}. "
+                           f"Flujo neto: {soles(a['capacity']['avg_net_cents'] or 0)} al mes. "
+                           f"Cuota disponible para un crédito: {soles(a['available_installment_cents'])}. "
+                           f"Resultado: {a['profile'].lower()}.")
+            except Exception:   # noqa: BLE001 (sin movimientos por Yape aún)
+                resumen = "Todavía no tengo suficientes movimientos por Yape verificados para un informe completo."
+            url = f"{settings.app_base_url}/api/businesses/{b.id}/report/pdf" if settings.app_base_url else None
+            return self.resp("📄 Tu informe financiero para el banco (solo lo verificado por Yape). " + resumen
+                             + ("" if url else " Lo descargas en la app, en «Informe BCP»."), media_url=url)
         if intent == "ayuda":
             name = f" {self.b.owner_name}" if self.b.owner_name else ""
             return self.resp(f"¡Hola{name}! " + summaries.help_text(db, b))
