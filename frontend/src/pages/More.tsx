@@ -217,10 +217,10 @@ function Settings({ ctx }: { ctx: Ctx }) {
   const bid = ctx.business.id
   const [ef, setEf] = useState('')
   const [ya, setYa] = useState('')
-  const [fixed, setFixed] = useState<{ id: number; name: string; amount_cents: number; due_day: number }[]>([])
+  const [fixed, setFixed] = useState<{ id: number; name: string; amount_cents: number; due_day: number; frequency: string; frequency_label: string; cost_type: string; monthly_cents: number }[]>([])
   const [debts, setDebts] = useState<{ id: number; creditor: string; installment_cents: number; due_day: number; remaining_cents: number }[]>([])
   const [assets, setAssets] = useState<{ id: number; name: string; value_cents: number }[]>([])
-  const [fx, setFx] = useState({ name: '', amount: '', day: '1' })
+  const [fx, setFx] = useState({ name: '', amount: '', day: '1', freq: 'mensual', type: '' })
   const [db, setDb] = useState({ creditor: '', total: '', inst: '', day: '15' })
   const [as, setAs] = useState({ name: '', value: '' })
   const [api, setApi] = useState(apiBase())
@@ -263,15 +263,43 @@ function Settings({ ctx }: { ctx: Ctx }) {
         <button className="btn sm ghost" disabled={!ef && !ya} onClick={opening}>Guardar lo que tengo hoy</button>
       </div>
       <div className="card">
-        <h2>Gastos fijos del mes</h2>
-        <p className="faint" style={{ marginTop: 0 }}>Para calcular tu punto de equilibrio y avisarte de pagos próximos.</p>
-        {fixed.map((f) => <div className="kv" key={f.id}><span>{f.name} · día {f.due_day}</span><span>{soles(f.amount_cents)} <button className="btn sm ghost" onClick={async () => { await send(`/api/fixed-expenses/${f.id}`, undefined, 'DELETE'); load(); ctx.refresh() }}>✕</button></span></div>)}
+        <h2>Lo que pagas en tu negocio</h2>
+        <p className="faint" style={{ marginTop: 0 }}>
+          <b>Fijo</b>: lo pagas vendas o no (alquiler, luz, pasaje al puesto). <b>Variable</b>: sube cuando vendes más (bolsas, flete).
+          Todo se lleva a «al mes» para tu punto de equilibrio y tus avisos de pago.
+        </p>
+        {fixed.map((f) => (
+          <div className="kv" key={f.id}>
+            <span>{f.name} · <span className={f.cost_type === 'fijo' ? 'pill' : 'pill warn'}>{f.cost_type}</span>
+              <small className="faint" style={{ display: 'block' }}>{soles(f.amount_cents)} {f.frequency_label}{f.frequency === 'mensual' ? ` · día ${f.due_day}` : ''}</small></span>
+            <span>{soles(f.monthly_cents)}/mes <button className="btn sm ghost" onClick={async () => { await send(`/api/fixed-expenses/${f.id}`, undefined, 'DELETE'); load(); ctx.refresh() }}>✕</button></span>
+          </div>
+        ))}
+        {fixed.length > 0 && (
+          <div className="kv" style={{ fontWeight: 600 }}>
+            <span>Total al mes</span>
+            <span>{soles(fixed.reduce((a, f) => a + f.monthly_cents, 0))} <small className="faint">(fijos {soles(fixed.filter((f) => f.cost_type === 'fijo').reduce((a, f) => a + f.monthly_cents, 0))})</small></span>
+          </div>
+        )}
         <div className="grid3" style={{ marginTop: 8 }}>
           <input className="input" placeholder="Alquiler" value={fx.name} onChange={(e) => setFx({ ...fx, name: e.target.value })} />
           <input className="input" placeholder="S/" inputMode="decimal" value={fx.amount} onChange={(e) => setFx({ ...fx, amount: e.target.value })} />
-          <input className="input" placeholder="Día" inputMode="numeric" value={fx.day} onChange={(e) => setFx({ ...fx, day: e.target.value })} />
+          <select className="input" value={fx.freq} onChange={(e) => setFx({ ...fx, freq: e.target.value })}>
+            <option value="diario">al día</option><option value="semanal">a la semana</option><option value="quincenal">cada quincena</option>
+            <option value="mensual">al mes</option><option value="anual">al año</option>
+          </select>
         </div>
-        <button className="btn sm" style={{ marginTop: 8 }} disabled={!fx.name || !fx.amount} onClick={async () => { await send(`/api/businesses/${bid}/fixed-expenses`, { name: fx.name, amount_cents: toCents(fx.amount), due_day: parseInt(fx.day) || 1 }); setFx({ name: '', amount: '', day: '1' }); load(); ctx.refresh() }}>Agregar</button>
+        <div className="grid3" style={{ marginTop: 8 }}>
+          <select className="input" value={fx.type} onChange={(e) => setFx({ ...fx, type: e.target.value })}>
+            <option value="">¿Fijo o variable?</option><option value="fijo">Fijo</option><option value="variable">Variable</option>
+          </select>
+          {fx.freq === 'mensual' ? <input className="input" placeholder="Día de pago" inputMode="numeric" value={fx.day} onChange={(e) => setFx({ ...fx, day: e.target.value })} /> : <span />}
+          <button className="btn sm" disabled={!fx.name || !fx.amount} onClick={async () => {
+            await send(`/api/businesses/${bid}/fixed-expenses`, { name: fx.name, amount_cents: toCents(fx.amount), due_day: parseInt(fx.day) || 1, frequency: fx.freq, cost_type: fx.type || null })
+            setFx({ name: '', amount: '', day: '1', freq: 'mensual', type: '' }); load(); ctx.refresh()
+          }}>Agregar</button>
+        </div>
+        <p className="faint" style={{ marginBottom: 0 }}>También puedes decirlo por WhatsApp: «pago 15 de bolsas a la semana».</p>
       </div>
       <div className="card">
         <h2>Deudas y cuotas</h2>

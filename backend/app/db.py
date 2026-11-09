@@ -36,7 +36,31 @@ SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 def init_db(eng=None) -> None:
     from . import models  # noqa: F401
-    Base.metadata.create_all(eng or engine)
+    eng = eng or engine
+    Base.metadata.create_all(eng)
+    _add_missing_columns(eng)
+
+
+def _add_missing_columns(eng) -> None:
+    """Migración mínima: agrega columnas nuevas (con valor por defecto) a tablas que ya existen.
+    Así una base que ya tiene datos (PostgreSQL en Render) se actualiza sin borrar nada."""
+    from sqlalchemy import inspect, text
+    insp = inspect(eng)
+    with eng.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if not insp.has_table(table.name):
+                continue
+            have = {c["name"] for c in insp.get_columns(table.name)}
+            for col in table.columns:
+                if col.name in have:
+                    continue
+                ctype = col.type.compile(dialect=eng.dialect)
+                default = ""
+                if col.server_default is not None:
+                    default = f" DEFAULT '{col.server_default.arg}'"
+                elif col.nullable is False:
+                    continue   # sin valor por defecto no se puede agregar a filas existentes
+                conn.execute(text(f'ALTER TABLE {table.name} ADD COLUMN {col.name} {ctype}{default}'))
 
 
 def get_db() -> Iterator[Session]:

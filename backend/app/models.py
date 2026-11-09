@@ -206,6 +206,8 @@ class FixedExpense(Base):
     name: Mapped[str] = mapped_column(String(60))
     amount_cents: Mapped[int] = mapped_column(Integer)
     due_day: Mapped[int] = mapped_column(Integer, default=1)
+    frequency: Mapped[str] = mapped_column(String(12), default="mensual", server_default="mensual")   # diario|semanal|quincenal|mensual|anual
+    cost_type: Mapped[str] = mapped_column(String(10), default="fijo", server_default="fijo")          # fijo|variable
 
 
 class Debt(Base):

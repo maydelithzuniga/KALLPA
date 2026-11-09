@@ -61,13 +61,24 @@ def test_1b_inventario_armado_por_conversacion(client):
     assert "cuántos kilos trae la saco de papa" in c("el tomate por jaba de 20 kilos a 50 soles, la papa por saco a 80 soles")["reply"]
     c("50")
     assert "¿Cómo te pagan" in c("2 jabas de tomate, medio saco de papa y 5 kilos de cebolla")["reply"]
-    c("las dos")
+    assert "¿qué cosas pagas para tu negocio y cada cuánto?" in c("las dos")["reply"]
+    r = c("alquiler del puesto 250 al mes, pasaje 5 al día y bolsas 10 a la semana")["reply"]
+    assert "• Alquiler del puesto S/ 250 al mes (fijo)" in r and "• Pasaje S/ 5 al día (fijo)" in r
+    assert "• Bolsas S/ 10 a la semana (variable)" in r and "S/ 400 fijos" in r
+    assert "¿Cada cuánto pagas licencia" in c("la licencia 120")["reply"]
+    assert "Licencia S/ 120 al año (fijo)" in c("al año")["reply"]
+    assert "cuenta la plata" in c("eso es todo")["reply"]
     r = c("150 en efectivo y 40 en yape")
     assert "Así quedó tu negocio" in r["reply"] and r["setup"]["stage"] == "resumen"
     assert "S/ 3.50" in c("el tomate es a 3.50")["reply"]
     r = c("sí")
     assert r["setup"]["done"] is True
     assert client.get(f"/api/businesses/{b['id']}").json()["setup_state"] == "listo"
+    fx = {f["name"]: f for f in client.get(f"/api/businesses/{b['id']}/fixed-expenses").json()}
+    assert fx["Pasaje"]["frequency"] == "diario" and fx["Pasaje"]["monthly_cents"] == 15000
+    assert fx["Bolsas"]["cost_type"] == "variable" and fx["Licencia"]["frequency"] == "anual"
+    be = client.get(f"/api/businesses/{b['id']}/dashboard").json()
+    assert be["break_even"]["fixed_cents"] == 25000 + 15000 + 1000   # alquiler + pasaje×30 + licencia/12
     inv = {i["name"]: i for i in client.get(f"/api/businesses/{b['id']}/inventory").json()}
     tom = inv["Tomate"]
     assert tom["spec"]["compra_por"] == {"unidad": "jaba", "equivale": 20.0, "costo_cents": 5000}
@@ -561,7 +572,9 @@ def test_30_explicaciones_con_sus_numeros_y_gastos_fijos(chat):
     r = chat("cuánto tengo que vender")["reply"]
     assert "gastos fijos" in r and "S/ 0" not in r   # sin gastos fijos: los pide, no dice «vende S/ 0»
     r = chat("pago 250 de alquiler del puesto al mes")["reply"]
-    assert r.startswith("✓ Anoté tu gasto fijo: alquiler del puesto S/ 250 al mes") and "al día" in r
+    assert r.startswith("✓ Anoté tu gasto: Alquiler del puesto S/ 250 al mes (fijo)") and "al día" in r
+    r = chat("bolsas 15 a la semana")["reply"]
+    assert "Bolsas S/ 15 a la semana (variable)" in r
     assert "S/ 250 al mes" in chat("qué es el punto de equilibrio")["reply"]
     assert "semana" in chat("qué es la rotación")["reply"]   # con pocos días no inventa «238 días»
     assert "S/ 40" in chat("qué es la ganancia")["reply"] or "ganaste" in chat("qué es la ganancia")["reply"]

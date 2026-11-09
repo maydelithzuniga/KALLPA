@@ -546,19 +546,27 @@ def update_goal(goal_id: int, body: dict[str, Any], db: Session = Depends(get_db
 class FixedIn(BaseModel):
     name: str
     amount_cents: int = Field(gt=0)
-    due_day: int = Field(ge=1, le=31)
+    due_day: int = Field(1, ge=1, le=31)
+    frequency: Literal["diario", "semanal", "quincenal", "mensual", "anual"] = "mensual"
+    cost_type: Literal["fijo", "variable"] | None = None
 
 
 @app.get("/api/businesses/{business_id}/fixed-expenses")
 def list_fixed(business_id: int, db: Session = Depends(get_db)):
-    return [{"id": f.id, "name": f.name, "amount_cents": f.amount_cents, "due_day": f.due_day}
+    from .costs import FREQ_LABEL, monthly_cents
+    return [{"id": f.id, "name": f.name, "amount_cents": f.amount_cents, "due_day": f.due_day,
+             "frequency": f.frequency or "mensual", "frequency_label": FREQ_LABEL.get(f.frequency or "mensual"),
+             "cost_type": f.cost_type or "fijo", "monthly_cents": monthly_cents(f.amount_cents, f.frequency)}
             for f in db.scalars(select(M.FixedExpense).where(M.FixedExpense.business_id == business_id)).all()]
 
 
 @app.post("/api/businesses/{business_id}/fixed-expenses")
 def add_fixed(business_id: int, body: FixedIn, db: Session = Depends(get_db)):
     biz(db, business_id)
-    db.add(M.FixedExpense(business_id=business_id, **body.model_dump()))
+    from .costs import classify
+    data = body.model_dump()
+    data["cost_type"] = data["cost_type"] or classify(data["name"], data["frequency"])
+    db.add(M.FixedExpense(business_id=business_id, **data))
     db.commit()
     return list_fixed(business_id, db)
 

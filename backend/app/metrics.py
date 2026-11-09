@@ -9,7 +9,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from . import ledger
@@ -171,6 +171,8 @@ def upcoming_payments(db: Session, business: M.Business, days: int = 7, ref: dat
     month_s = month_start(today)
     paid_this_month = movements(db, business.id, *_bounds(month_s, add_months(month_s, 1)), kinds={M.EXPENSE, M.DEBT_PAYMENT})
     for fx in db.scalars(select(M.FixedExpense).where(M.FixedExpense.business_id == business.id)).all():
+        if (fx.frequency or "mensual") != "mensual":
+            continue   # los diarios/semanales se pagan del día a día; los anuales no tienen día del mes
         for due in _due_dates(fx.due_day, today, horizon):
             already = any(m.kind == M.EXPENSE and (m.category or "").lower() == fx.name.lower()
                           and m.occurred_at.month == due.month for m in paid_this_month) and due.month == today.month
@@ -364,8 +366,17 @@ def cost_alerts(db: Session, business: M.Business, ref: date | None = None) -> l
 
 # ------------------------------------------------------------------ equilibrio y rotación
 
+def declared_costs(db: Session, business: M.Business) -> dict[str, int]:
+    """Gastos que la persona dijo que paga, llevados a «cuánto es al mes» según su frecuencia."""
+    from .costs import monthly_cents
+    out = {"fijo": 0, "variable": 0}
+    for f in db.scalars(select(M.FixedExpense).where(M.FixedExpense.business_id == business.id)).all():
+        out["fijo" if (f.cost_type or "fijo") == "fijo" else "variable"] += monthly_cents(f.amount_cents, f.frequency)
+    return out
+
+
 def monthly_fixed_costs(db: Session, business: M.Business) -> int:
-    declared = sum(f.amount_cents for f in db.scalars(select(M.FixedExpense).where(M.FixedExpense.business_id == business.id)).all())
+    declared = declared_costs(db, business)["fijo"]
     if declared:
         return declared
     today = today_lima()
@@ -380,11 +391,18 @@ def break_even(db: Session, business: M.Business) -> dict[str, Any]:
     if st["sales_cents"] <= 0:
         return {"available": False, "reason": "Aún no hay ventas suficientes para calcularlo.", "fixed_cents": fixed}
     variable = st["cogs_cents"] + st["non_inventory_purchases_cents"] + st["variable_expenses_cents"]
+    declared_var = declared_costs(db, business)["variable"]
+    if declared_var and not st["variable_expenses_cents"]:
+        # aún no registra sus gastos variables (bolsas, flete): uso lo que dijo, en proporción a los días con datos
+        first = db.scalar(select(func.min(M.Movement.occurred_at)).where(M.Movement.business_id == business.id))
+        days = min(30, max(1, (today - first.date()).days + 1)) if first else 30
+        variable += round(declared_var * days / 30)
     cm_ratio = 1 - variable / st["sales_cents"]
     if cm_ratio <= 0:
         return {"available": False, "reason": "Tus costos están por encima de tus ventas: revisa precios y costos.", "fixed_cents": fixed}
     be = round(fixed / cm_ratio)
-    return {"available": True, "fixed_cents": fixed, "contribution_margin_pct": round(cm_ratio * 100, 1),
+    return {"available": True, "fixed_cents": fixed, "variable_declared_cents": declared_costs(db, business)["variable"],
+            "contribution_margin_pct": round(cm_ratio * 100, 1),
             "break_even_monthly_cents": be, "break_even_daily_cents": round(be / 30),
             "last30_sales_cents": st["sales_cents"],
             "coverage_pct": round(100 * st["sales_cents"] / be) if be else None,

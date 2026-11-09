@@ -22,7 +22,7 @@ from .money import soles
 from .templates import TEMPLATES, VEG, guess_kind
 from .timeutil import now_lima
 
-STAGES = ["nombre", "vende", "mas", "como", "precio", "compra", "stock", "pago", "plata", "resumen"]
+STAGES = ["nombre", "vende", "mas", "como", "precio", "compra", "stock", "pago", "gastos", "plata", "resumen"]
 GENERIC = {"vendo", "vendemos", "venta", "ventas", "verdura", "verduras", "fruta", "frutas", "producto", "productos", "cosa",
            "cosas", "todo", "tipo", "mercado", "puesto", "tienda", "bodega", "tambien", "mas", "como", "varias", "varios",
            "otras", "otros", "hortalizas", "abarrotes", "mi", "negocio", "soy", "tengo", "un", "una", "1", "y", "e", "o",
@@ -238,6 +238,22 @@ class Onboarding:
             return self.reply(prefix + f"¿Cuánto te queda ahorita de cada cosa, más o menos? Por ejemplo {ex}. Si no sabes, di «no sé».", ["No sé"])
         if stage == "pago":
             return self.reply(prefix + "¿Cómo te pagan tus clientes: en efectivo, por Yape o de las dos formas?", ["Las dos", "Solo efectivo", "Solo Yape"])
+        if stage == "gastos":
+            from . import costs
+            pend = d.get("pending") or ""
+            if pend.startswith("gfreq:"):
+                it = d["expenses"][int(pend.split(":")[1])]
+                return self.reply(prefix + f"¿Cada cuánto pagas {it['name'].lower()} ({soles(it['amount_cents'])})?",
+                                  ["Al día", "A la semana", "Al mes", "Al año"])
+            if d.get("expenses"):
+                return self.reply(prefix + "Anoté:\n" + "\n".join("• " + costs.line(i) for i in d["expenses"]) + "\n"
+                                  + costs.totals_text(d["expenses"]) + "\n(" + costs.explain_types() + ")\n¿Pagas algo más? Dime qué y cada cuánto, o «eso es todo».",
+                                  ["Eso es todo"])
+            ex = ("«alquiler del puesto 250 al mes, luz 40 al mes, pasaje 10 al día, bolsas 15 a la semana, licencia 120 al año»"
+                  if d.get("kind") != "comida" else
+                  "«alquiler 500 al mes, gas 55 a la semana, ayudante 300 a la quincena, descartables 20 al día»")
+            return self.reply(prefix + "Ahora tus gastos: ¿qué cosas pagas para tu negocio y cada cuánto? "
+                              f"Por ejemplo {ex}. Si no pagas nada aparte de tu mercadería, di «nada».", ["Nada"])
         if stage == "plata":
             if d.get("pending") == "yape":
                 return self.reply(prefix + "¿Y en tu Yape cuánto tienes? Lo ves al abrir tu app de Yape.", ["No sé"])
@@ -270,6 +286,11 @@ class Onboarding:
             lines.append(f"• {p['name']}: " + (", ".join(parts) if parts else "sin datos todavía"))
         methods = d.get("methods") or ["efectivo", "yape"]
         lines.append("Te pagan " + (" y por ".join("en efectivo" if m == "efectivo" else "Yape" for m in methods)) + ".")
+        if d.get("expenses"):
+            from . import costs
+            lines.append("Tus gastos:")
+            lines += ["• " + costs.line(i) for i in d["expenses"]]
+            lines.append(costs.totals_text(d["expenses"]))
         if d.get("balances"):
             lines.append("Tienes " + " y ".join(f"{soles(v)} en {'efectivo' if k == 'efectivo' else 'Yape'}" for k, v in d["balances"].items()) + ".")
         return "\n".join(lines)
@@ -284,7 +305,7 @@ class Onboarding:
             if re.search(r"\b(vendi|gaste|compre|pague)\b", t):
                 prefix = "Antes de anotar tus ventas, conozcamos tu negocio: son unas preguntas rápidas. "
             return self.ask("nombre", prefix)
-        if stage not in ("precio", "compra", "stock", "plata", "resumen") and re.match(r"^(vendi|gaste|compre|pague)\b", t):
+        if stage not in ("precio", "compra", "stock", "gastos", "plata", "resumen") and re.match(r"^(vendi|gaste|compre|pague)\b", t):
             left = len(STAGES) - STAGES.index(stage)
             return self.ask(stage, f"Anoto tus ventas apenas terminemos (faltan {left} preguntas). ")
         return getattr(self, f"on_{stage}")(text, t)
@@ -506,7 +527,44 @@ class Onboarding:
         else:
             return self.ask("pago", "No te entendí bien. ")
         d["pending"] = None
-        return self.ask("plata")
+        return self.ask("gastos")
+
+    def on_gastos(self, raw: str, t: str):
+        from . import costs
+        d = self.doc
+        exp = d.setdefault("expenses", [])
+        pend = d.get("pending") or ""
+        if pend.startswith("gfreq:"):
+            i = int(pend.split(":")[1])
+            freq = costs.find_frequency(t) or {"dia": "diario", "semana": "semanal", "mes": "mensual", "ano": "anual",
+                                               "quincena": "quincenal"}.get(t.split()[-1] if t.split() else "", None)
+            if not freq:
+                return self.ask("gastos", "No te entendí. ")
+            exp[i]["frequency"] = freq
+            exp[i]["cost_type"] = costs.classify(exp[i]["name"], freq)
+            d["pending"] = None
+            return self._next_missing_freq()
+        if (DONE_RE.match(t) or DONT_KNOW_RE.search(t)) and not re.search(r"\d", t):
+            d["pending"] = None
+            return self.ask("plata")
+        items = costs.parse(raw)
+        if not items:
+            return self.ask("gastos", "No te entendí bien. Dime qué pagas, cuánto y cada cuánto. ")
+        names = {e["name"].lower() for e in exp}
+        for it in items:
+            if it["name"].lower() in names:     # lo repitió: actualizo
+                exp[:] = [e for e in exp if e["name"].lower() != it["name"].lower()]
+            exp.append(it)
+        return self._next_missing_freq()
+
+    def _next_missing_freq(self):
+        d = self.doc
+        for i, e in enumerate(d.get("expenses") or []):
+            if not e.get("frequency"):
+                d["pending"] = f"gfreq:{i}"
+                return self.ask("gastos")
+        d["pending"] = None
+        return self.ask("gastos")
 
     def on_plata(self, raw: str, t: str):
         d = self.doc
@@ -590,6 +648,14 @@ class Onboarding:
             if prod.track_stock and prod.initial_stock is None and kind == "reventa":
                 prod.initial_stock = None
             self.db.add(prod)
+        for e in d.get("expenses") or []:
+            fx = self.db.scalar(select(M.FixedExpense).where(M.FixedExpense.business_id == b.id, M.FixedExpense.name == e["name"]))
+            fx = fx or M.FixedExpense(business_id=b.id, name=e["name"])
+            fx.amount_cents = e["amount_cents"]
+            fx.frequency = e.get("frequency") or "mensual"
+            fx.cost_type = e.get("cost_type") or "fijo"
+            fx.due_day = e.get("due_day") or 1
+            self.db.add(fx)
         first = now_lima() - timedelta(minutes=1)
         for pocket, cents in (d.get("balances") or {}).items():
             if pocket in M.POCKETS and cents is not None:

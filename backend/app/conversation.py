@@ -283,16 +283,22 @@ class Engine:
         if i == "anular":
             return self.undo_last()
         if i == "gasto_fijo":
-            name, amt = p.fields["name"], p.fields["amount_cents"]
-            fx = self.db.scalar(select(M.FixedExpense).where(M.FixedExpense.business_id == self.b.id,
-                                                              M.FixedExpense.name == name))
-            if fx:
-                fx.amount_cents = amt
-            else:
-                self.db.add(M.FixedExpense(business_id=self.b.id, name=name, amount_cents=amt, due_day=1))
+            from . import costs
+            saved = []
+            for it in p.fields["items"]:
+                fx = self.db.scalar(select(M.FixedExpense).where(M.FixedExpense.business_id == self.b.id,
+                                                                  M.FixedExpense.name == it["name"]))
+                fx = fx or M.FixedExpense(business_id=self.b.id, name=it["name"])
+                fx.amount_cents = it["amount_cents"]
+                fx.frequency = it["frequency"] or "mensual"
+                fx.cost_type = it["cost_type"]
+                fx.due_day = it.get("due_day") or fx.due_day or 1
+                self.db.add(fx)
+                saved.append(costs.line({**it, "frequency": fx.frequency}))
             self.db.commit()
-            return self.resp(f"✓ Anoté tu gasto fijo: {name.lower()} {soles(amt)} al mes. "
-                             + summaries.explain(self.db, self.b, "equilibrio").replace("Es lo mínimo que tienes que vender para no perder: lo que cubre tus gastos fijos del mes. ", ""))
+            be = summaries.explain(self.db, self.b, "equilibrio").replace(
+                "Es lo mínimo que tienes que vender para no perder: lo que cubre tus gastos fijos del mes. ", "")
+            return self.resp("✓ Anoté tu gasto: " + "; ".join(saved) + ". " + be)
         if i == "consentir_informe":
             return self.consent(True)
         return self.answer_question(i, raw)

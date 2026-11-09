@@ -17,7 +17,11 @@ Escribe cada línea **como un mensaje aparte** en el chat «Twilio Sandbox» y e
 | `a 20 céntimos, me cuesta 10 céntimos` | ¿Cómo compras en el mayorista? |
 | `el tomate por jaba de 20 kilos a 40 soles, la papa por saco de 50 kilos a 85 y la cebolla por kilo` | ¿Cuánto te queda ahorita de cada cosa? |
 | `1 jaba de tomate, medio saco de papa, 10 kilos de cebolla y 100 limones` | ¿Cómo te pagan: efectivo, Yape o las dos? |
-| `las dos` | Cuenta la plata de tu monedero. ¿Cuánto es? |
+| `las dos` | Ahora tus gastos: ¿qué cosas pagas para tu negocio y cada cuánto? |
+| `alquiler del puesto 250 al mes, luz 40 al mes, pasaje 10 al día y bolsas 15 a la semana` | Anoté: Alquiler del puesto S/ 250 al mes (fijo), Luz S/ 40 al mes (fijo), Pasaje S/ 10 al día (fijo), Bolsas S/ 15 a la semana (variable). Al mes son unos S/ 655 (S/ 590 fijos y S/ 65 variables). ¿Pagas algo más? |
+| `la licencia 120` | ¿Cada cuánto pagas licencia (S/ 120)? *(si no dices cada cuánto, te pregunta)* |
+| `al año` | (lista actualizada) ¿Pagas algo más? |
+| `eso es todo` | Última pregunta: cuenta la plata de tu monedero. ¿Cuánto es? |
 | `tengo 80 soles en el monedero y 50 en el yape` | Así quedó tu negocio: (lista con precios, costos y lo que te queda) ¿Está bien así? |
 | `sí, está bien` | ¡Todo listo, Maydelith! 🎉 |
 
@@ -47,7 +51,7 @@ Escribe cada línea **como un mensaje aparte** en el chat «Twilio Sandbox» y e
 | `qué es el flujo de caja` | Explicación con TUS números de la semana |
 | `qué es la ganancia` / `qué es el margen` | Con tus ventas y costos reales |
 | `cuánto tengo que vender` | Te pide tus gastos fijos si aún no los sabe |
-| `pago 250 de alquiler al mes` | ✓ Anoté tu gasto fijo… Necesitas vender S/ … al día |
+| `pago 250 de alquiler al mes` / `bolsas 15 a la semana` | ✓ Anoté tu gasto: … (fijo / variable). Necesitas vender S/ … al día |
 | `qué es la rotación` | Cuánto tienes en mercadería y (con una semana de datos) en cuántos días la vendes |
 | `quiero ahorrar 300 soles para fin de mes` | Meta guardada |
 | `ayuda` | Ejemplos con tus productos |
@@ -74,7 +78,9 @@ Escribe cada línea **como un mensaje aparte** en el chat «Twilio Sandbox» y e
 | `eso es todo` → `por unidad` | ¿A cuánto das la unidad de polo? ¿Y a ti cuánto te cuesta? |
 | `a 25, me cuesta 12` / `a 30, me cuesta 15` / `a 50, me cuesta 28` | (una pregunta por prenda) |
 | `los polos por docena a 144, lo demás por unidad` | ¿Cuánto te queda ahorita? |
-| `20 polos, 15 blusas y 10 pantalones` → `las dos` → `tengo 100 en efectivo y 60 en yape` → `sí` | ¡Todo listo! |
+| `20 polos, 15 blusas y 10 pantalones` → `las dos` | Ahora tus gastos: ¿qué pagas y cada cuánto? |
+| `alquiler 300 el 5 de cada mes y bolsas 20 a la semana` → `eso es todo` | Alquiler S/ 300 al mes (fijo), Bolsas S/ 20 a la semana (variable) |
+| `tengo 100 en efectivo y 60 en yape` → `sí` | ¡Todo listo! |
 | `vendí 2 polos y una blusa por yape` | ✓ S/ 50 dos polos, S/ 30 una blusa · Yape |
 | `vendí un pantalón en efectivo` | ✓ S/ 50 un pantalón · efectivo (usa tu precio, sin preguntar) |
 | `Carmen se llevó una blusa fiado` | ✓ S/ 30 una blusa · te debe S/ 30 (Carmen) |

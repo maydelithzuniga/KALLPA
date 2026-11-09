@@ -99,7 +99,10 @@ def consent_status(db, b):
 
 
 def list_fixed(db, bid):
-    return [{"id": f.id, "name": f.name, "amount_cents": f.amount_cents, "due_day": f.due_day}
+    from app.costs import FREQ_LABEL, monthly_cents
+    return [{"id": f.id, "name": f.name, "amount_cents": f.amount_cents, "due_day": f.due_day,
+             "frequency": f.frequency or "mensual", "frequency_label": FREQ_LABEL.get(f.frequency or "mensual"),
+             "cost_type": f.cost_type or "fijo", "monthly_cents": monthly_cents(f.amount_cents, f.frequency)}
             for f in db.scalars(select(M.FixedExpense).where(M.FixedExpense.business_id == int(bid))).all()]
 
 
@@ -425,7 +428,11 @@ def r_fixed(db, q, body, bid):
 @route("POST", r"/api/businesses/(\d+)/fixed-expenses")
 def r_addfixed(db, q, body, bid):
     biz(db, bid)
-    db.add(M.FixedExpense(business_id=int(bid), name=body["name"], amount_cents=int(body["amount_cents"]), due_day=int(body["due_day"])))
+    from app.costs import classify
+    freq = body.get("frequency") or "mensual"
+    db.add(M.FixedExpense(business_id=int(bid), name=body["name"], amount_cents=int(body["amount_cents"]),
+                          due_day=int(body.get("due_day") or 1), frequency=freq,
+                          cost_type=body.get("cost_type") or classify(body["name"], freq)))
     db.commit()
     return list_fixed(db, bid)
 

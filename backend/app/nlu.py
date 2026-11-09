@@ -449,15 +449,15 @@ def parse(text: str, products: list[ProductRef], today: date) -> Parsed:
         if m and m.group(1) not in NAME_STOP:
             p.fields["counterparty"] = m.group(1).capitalize()
         return p
-    # --- gasto fijo del mes («pago 250 de alquiler al mes»): sirve para el punto de equilibrio
-    if _has(t, r"\b(al mes|mensual|mensuales|cada mes|por mes|mes a mes)\b") and _has(t, r"\b(pago|pagamos|gasto|gastamos|sale|cuesta)\b") \
-            and not _has(t, r"\b(ahorrar|juntar|meta|cuota del prestamo|vendo|vendi)\b"):
-        amts = find_amounts(t) or _bare_amounts(t)
-        nm = re.search(r"\b(alquiler(?: del (?:puesto|local|stand))?|luz(?: y agua)?|agua|internet|celular|telefono|sueldos?|ayudante|"
-                       r"gas|municipalidad|licencia|seguro|vigilancia|limpieza|cochera|transporte|movilidad)\b", t)
-        if amts:
+    # --- gasto que se paga cada cierto tiempo («pago 250 de alquiler al mes», «bolsas 15 a la semana»)
+    from . import costs as _costs
+    if _costs.find_frequency(t) and (_has(t, r"\b(pago|pagamos|gasto|gastamos|sale|cuesta|me cobran|doy)\b")
+                                     or _costs.FIXED_RE.search(t) or _costs.VARIABLE_RE.search(t)) \
+            and not _has(t, r"\b(ahorrar|juntar|meta|vendo|vendi|vendemos|gane|gano|me pagan|cobro)\b"):
+        items = _costs.parse(text)
+        if items:
             p.intent = "gasto_fijo"
-            p.fields.update({"amount_cents": amts[0].cents, "name": (nm.group(1) if nm else "gasto fijo").capitalize()})
+            p.fields["items"] = items
             return p
     # --- contar la plata (en vez de «saldo inicial»)
     if _has(t, r"\b(contar (mi )?plata|contar (mi )?caja|cuenta mi plata|quiero contar)\b"):
