@@ -1,0 +1,72 @@
+# Guion para probar Kallpa por WhatsApp (copiar y pegar, un mensaje a la vez)
+
+Escribe cada línea **como un mensaje aparte** en el chat «Twilio Sandbox» y espera la respuesta.
+(Probado con la misma lógica que corre en el servidor. Si activaste Gemini, las palabras pueden variar un poco.)
+
+## 1 · Primera vez: Kallpa conoce tu negocio (sin saber que arma tu inventario)
+| Tú escribes | Kallpa responde (más o menos) |
+|---|---|
+| `hola` | ¡Hola! Soy Kallpa 👋 … ¿Cómo te llamas? |
+| `Maydelith` | Mucho gusto, Maydelith. ¿Qué vendes? |
+| `verduras: tomate, papa, cebolla y limón` | Anoté: tomate, papa, cebolla, limón. ¿Vendes algo más? |
+| `eso es todo` | ¿Cómo vendes casi todo: por kilo, por unidad…? |
+| `por kilo, pero el limón por unidad` | (1 de 4) ¿A cuánto das el kilo de tomate? ¿Y a ti cuánto te cuesta? |
+| `a 3, me cuesta 2` | (2 de 4) … papa |
+| `a 2.50, me cuesta 1.80` | (3 de 4) … cebolla |
+| `a 3, me cuesta 2.20` | (4 de 4) ¿A cuánto das la unidad de limón? |
+| `a 20 céntimos, me cuesta 10 céntimos` | ¿Cómo compras en el mayorista? |
+| `el tomate por jaba de 20 kilos a 40 soles, la papa por saco de 50 kilos a 85 y la cebolla por kilo` | ¿Cuánto te queda ahorita de cada cosa? |
+| `1 jaba de tomate, medio saco de papa, 10 kilos de cebolla y 100 limones` | ¿Cómo te pagan: efectivo, Yape o las dos? |
+| `las dos` | Cuenta la plata de tu monedero. ¿Cuánto es? |
+| `tengo 80 soles en el monedero y 50 en el yape` | Así quedó tu negocio: (lista con precios, costos y lo que te queda) ¿Está bien así? |
+| `sí, está bien` | ¡Todo listo, Maydelith! 🎉 |
+
+## 2 · Durante el día: ventas, gastos, fiados y pérdidas (se guarda al toque)
+| Tú escribes | Kallpa responde |
+|---|---|
+| `vendí 3 soles de tomate y un kilo de papa en efectivo` | ✓ S/ 3 tomate · quedan 19 kg, S/ 2.50 papa (1 kg) · quedan 24 kg · efectivo |
+| `vendí 2 kilos de cebolla por yape` | ✓ S/ 6 cebolla (2 kg) · Yape (por verificar) |
+| `deshacer` | Listo, lo borré |
+| `vendí 2 kilos de cebolla por yape` | ✓ S/ 6 cebolla (2 kg) · Yape |
+| `vendí medio kilo de tomate y 10 limones` | ¿Te pagaron en efectivo o por Yape? *(pregunta solo lo que falta)* |
+| `efectivo` | ✓ S/ 1.50 tomate (½ kg), S/ 2 diez limones · efectivo |
+| `gasté 5 soles en bolsas` | Gasto del negocio: bolsas, S/ 5. ¿Salió del efectivo o del Yape? |
+| `yape` | ✓ gasto S/ 5 bolsas y empaques · Yape |
+| `Rosa se llevó 2 kilos de papa fiado` | ¿Por cuánto en total? (sugiere S/ 5) |
+| `5` | ✓ S/ 5 papa (2 kilos) · te debe S/ 5 (Rosa) |
+| `se malogró un kilo de tomate` | ✓ pérdida S/ 2 · tomate (malogrado) · lo resté de tu ganancia |
+| `en esta última hora vendí como 30 soles en efectivo` | ✓ S/ 30 ventas varias · efectivo |
+| `Rosa me pagó 5 soles` | Rosa te pagó S/ 5 del fiado. ¿Efectivo o Yape? |
+| `efectivo` | ✓ Rosa te pagó S/ 5 · ya no te debe nada |
+
+## 3 · Preguntas
+| Tú escribes | Kallpa responde |
+|---|---|
+| `resumen` | Tu día: vendiste S/ 50 (Yape, efectivo, fiado)… ganancia… pérdidas… caja |
+| `cuánto tengo` | En caja tienes S/ 175 (S/ 124 efectivo, S/ 51 Yape) |
+| `cuánto tomate me queda` | Tomate: 17.5 kilos |
+| `qué es el flujo de caja` | Explicación con TUS números de la semana |
+| `quiero ahorrar 300 soles para fin de mes` | Meta guardada |
+| `ayuda` | Ejemplos con tus productos |
+
+## 4 · Cierre del día (contando la plata)
+| Tú escribes | Kallpa responde |
+|---|---|
+| `cerrar mi día` | Hoy registraste S/ 50… cuenta la plata de tu monedero: ¿cuánto tienes? |
+| `tengo 150 en efectivo` | Esperaba S/ 124: te sobran S/ 26. ¿Las guardo como ventas en efectivo? |
+| `sí, guárdalas` | Guardé S/ 26… ¿Tuviste alguna pérdida hoy? |
+| `no, nada` | Listo, tu día está cerrado. Vendiste S/ 76 y ganaste S/ 55.20… revisa 2 Yapes por verificar |
+
+## 5 · Lista para cobrar (te llega a ti, no a la clienta)
+| Tú escribes | Kallpa responde |
+|---|---|
+| `Juan se llevó un kilo de cebolla fiado` | ¿Por cuánto en total? |
+| `3` | ✓ S/ 3 cebolla (1 kilo) · te debe S/ 3 (Juan) |
+| `a quién tengo que cobrar` | Por cobrar (S/ 3): Juan S/ 3, de hoy. |
+
+## 6 · Audios
+Manda un **audio** diciendo: «vendí dos kilos de papa y un kilo de cebolla en efectivo».
+Kallpa responde con lo que entendió (🎙️ «…») y lo guarda. Necesita `AGENT_ENABLED=true` y `GEMINI_API_KEY` en Render.
+
+## Después: míralo en la app
+Abre https://kallpa-kzc2.onrender.com → tu negocio (con tu nombre) → Inicio, Mis números, Historial, Informe BCP.
