@@ -127,6 +127,8 @@ def daily_text(db: Session, b: M.Business, d: date | None = None) -> str:
     if g and g.get("progress_pct") is not None:
         nm = g["name"].lower()
         parts.append(f"Vas al {g['progress_pct']}% de tu meta" + ("" if nm in ("mi meta", "meta") else f" «{g['name']}»") + ".")
+    elif not [x for x in metrics.goals(db, b) if x["status"] == "activa"]:
+        parts.append("🎯 Aún no tienes una meta: escribe «metas» y te propongo una con tus números.")
     low = _stock_low(db, b)
     if low:
         i = low[0]

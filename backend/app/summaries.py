@@ -55,6 +55,8 @@ def daily(db: Session, b: M.Business, d: date | None = None) -> str:
     if gs:
         g = gs[-1] if gs[-1]["kind"] == "ahorro" else gs[0]
         txt += f" Vas al {g['progress_pct']}% de tu meta {('de ' + g['name'].lower()) if g['kind'] == 'ahorro' else 'de reposición'}."
+    elif not [g for g in metrics.goals(db, b) if g["status"] == "activa"]:
+        txt += " 🎯 Aún no tienes una meta: escribe «metas» y te propongo una."
     for a in metrics.cost_alerts(db, b, d):
         if a["pct"] > 0:
             txt += f" Ojo: {a['product'].lower()} subió {a['pct']}% vs la semana pasada."

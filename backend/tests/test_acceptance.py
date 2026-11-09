@@ -646,3 +646,29 @@ def test_34_audio_sin_ia_explica_la_causa(client, monkeypatch):
     monkeypatch.setattr(whatsapp, "send_text", lambda to, body, quick=None: sent.append(body))
     main._wa_process([{"id": "au1", "from": "51999000222", "type": "audio", "audio_bytes": b"ogg", "timestamp": None}])
     assert "falta activar la IA" in sent[-1]
+
+
+def test_35_metas_propuestas_al_terminar_la_bienvenida(client):
+    """Al terminar la primera conversación propone metas con sus números, explica «por qué» y guarda la elegida."""
+    b = client.post("/api/businesses", json={}).json()
+    n = [0]
+
+    def c(t):
+        n[0] += 1
+        return client.post(f"/api/businesses/{b['id']}/chat", json={"text": t, "message_id": f"g{n[0]}"}).json()
+    for t in ["hola", "Juana", "verduras: tomate y papa", "eso es todo", "por kilo", "a 3, me cuesta 2", "a 2.50, me cuesta 1.80",
+              "el tomate por jaba de 20 kilos a 40 soles y la papa por kilo", "1 jaba de tomate y 10 kilos de papa", "las dos",
+              "alquiler del puesto 250 al mes y luz 40 al mes", "eso es todo", "100 en efectivo y 20 en yape"]:
+        c(t)
+    r = c("sí")
+    assert "Ponerte una meta" in r["reply"] or "ponerte una meta" in r["reply"]
+    assert "1️⃣ Reponer tu mercadería" in r["reply"] and "2️⃣ Tus gastos fijos del mes: S/ 290" in r["reply"]
+    assert "Responde 1, 2 o 3" in r["reply"]
+    assert "llenar tu puesto" in c("¿por qué la 1?")["reply"]
+    assert "Separando" in c("¿por qué la 2?")["reply"]
+    assert c("vendí una jaba de tomate en efectivo")["reply"].startswith("✓")   # una venta no elige meta
+    assert "Aún no tienes una meta" in c("resumen")["reply"]
+    assert "1️⃣" in c("metas")["reply"]
+    r = c("la 2")["reply"]
+    assert r.startswith("✓ ¡Meta guardada! «Mis gastos fijos del mes»: S/ 290")
+    assert "Aún no tienes una meta" not in c("resumen")["reply"]

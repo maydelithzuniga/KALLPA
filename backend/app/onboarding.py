@@ -666,9 +666,19 @@ class Onboarding:
         b.setup_source = "conversacion"
         d["stage"] = "listo"
         ex = "«vendí 3 soles de tomate y un kilo de papa en efectivo»" if kind == "verduras" else "«vendí 2 polos a 20 por Yape»"
-        return self.reply(f"¡Todo listo{', ' + d['owner'] if d.get('owner') else ''}! 🎉 Ya tengo tu lista de productos y tu caja. "
-                          f"Desde ahora, cuando vendas algo mándame un audio, por ejemplo {ex}. Se guarda al toque. "
-                          "En la noche dime «cerrar mi día» y cuadramos tu plata.", ["Ver mi negocio"], done=True)
+        txt = (f"¡Todo listo{', ' + d['owner'] if d.get('owner') else ''}! 🎉 Ya tengo tu lista de productos y tu caja. "
+               f"Desde ahora, cuando vendas algo mándame un audio, por ejemplo {ex}. Se guarda al toque. "
+               "En la noche dime «cerrar mi día» y cuadramos tu plata.")
+        # apenas tenemos inventario y gastos: proponer metas con sus números
+        self.db.flush()
+        from . import goals_coach
+        metas, draft, q = goals_coach.start(self.eng)
+        if metas:
+            self.save()
+            return self.eng.resp(txt + "\n\n" + metas, draft, q,
+                                 setup={"stage": "listo", "step": len(STAGES), "total": len(STAGES), "done": True,
+                                        "products": self.doc["products"]})
+        return self.reply(txt, ["Ver mi negocio"], done=True)
 
 
 def handle(eng, text: str) -> dict[str, Any]:

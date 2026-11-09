@@ -129,6 +129,19 @@ class Engine:
             draft.status = "cancelado"   # siguió con otra cosa: no insistimos este mes
             self.db.flush()
             draft = None
+        if draft and draft.action == "propuesta_meta":
+            from . import goals_coach
+            r = goals_coach.reply(self, draft, text, parsed.intent)
+            if r is not None:
+                return r
+            if parsed.intent.startswith(("resumen", "explica", "caja", "fiados", "inventario", "consejos", "reponer", "ayuda")):
+                r = self.answer_question(parsed.intent, parsed.text)
+                r["reply"] += "\n\n🎯 ¿Y con qué meta empiezas? Responde 1, 2 o 3."
+                r["draft"] = self.draft_view(draft)
+                return r
+            draft.status = "cancelado"   # siguió con otra cosa (una venta…): la meta se le recuerda en la noche
+            self.db.flush()
+            draft = None
         if draft:
             r = self.continue_draft(draft, parsed, text, occurred_at)
             if r is not None:
@@ -276,6 +289,12 @@ class Engine:
             c = reconcile.cash_count(self.db, self.b, p.fields["pocket"], p.fields["counted_cents"])
             return self.resp(reconcile.count_text(self.db, c), count=metrics._count_dict(c))
         if i == "meta":
+            if not p.fields.get("target_cents"):   # «quiero una meta» sin monto: le propongo con sus números
+                from . import goals_coach
+                txt, d, q = goals_coach.start(self)
+                if txt:
+                    self.db.commit()
+                    return self.resp(txt, d, q)
             d = self.new_draft("meta", dict(p.fields))
             return self.step(d)
         if i == "ahorro_meta":
@@ -342,6 +361,12 @@ class Engine:
         if intent == "fiados":
             return self.collect_message(nlu.Parsed(intent="cobrar"))
         if intent == "metas":
+            if not [g for g in metrics.goals(db, b) if g["status"] == "activa"]:
+                from . import goals_coach
+                txt, d, q = goals_coach.start(self)
+                if txt:
+                    self.db.commit()
+                    return self.resp(txt, d, q)
             return self.resp(summaries.goals_text(db, b))
         if intent == "inventario":
             return self.resp(summaries.inventory_text(db, b, text))
@@ -828,7 +853,7 @@ class Engine:
             return f"Pago de cuota{(' a ' + data['counterparty']) if data.get('counterparty') else ''}: {soles(amt)}{_m(data.get('method'))}.{q}"
         if k == M.GOAL_SAVING:
             g = self.db.get(M.Goal, data["goal_id"]) if data.get("goal_id") else None
-            return f"Separas {soles(amt)} {('del ' + data['method']) if data.get('method') else ''} para «{g.name if g else 'tu meta'}».{q}"
+            return f"Separas {soles(amt)}{(' del ' + data['method']) if data.get('method') else ''} para «{g.name if g else 'tu meta'}».{q}"
         if k == M.STOCK_ADJ:
             label = {"merma": "Merma", "devolucion": "Devolución", "ajuste": "Ajuste"}[data.get("reason", "ajuste")]
             return f"{label}: {qty_name(data.get('quantity'), name)}.{q}"

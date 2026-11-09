@@ -195,7 +195,7 @@ MONEY_FOLLOWERS = {"", "en", "y", "por", "con", "de", "al", "a", "cada", "total"
                    "mensual", "mensuales", "semanal", "diario", "diarios", "al mes"}
 MONEY_PRECEDERS = {"a", "por", "de", "en", "pague", "pagaron", "gaste", "cobre", "debe", "dio", "pago",
                    "total", "cuesta", "costo", "vale", "precio", "con", "saque", "puse", "aporte",
-                   "pase", "separe", "ahorrar", "juntar", "es", "son", "adelanto", "cuenta", "fie",
+                   "pase", "separe", "guarde", "ahorre", "aparte", "ahorrar", "juntar", "es", "son", "adelanto", "cuenta", "fie",
                    "me debe", "me dio", "me pago", "me pagaron", "le pague", "me cobraron", "tengo",
                    "hay", "conte", "invertir", "deposite", "transferi", "movi", "retire", "meta",
                    "unos", "unas", "como", "dejo", "quedo", "falta", "faltan", "cobro", "cobra",
@@ -407,7 +407,7 @@ QUESTION_PATTERNS: list[tuple[str, str]] = [
     (r"\b(cuanto cobre)\b", "resumen_dia"),
     (r"\b(cuanto tengo|cuanta plata tengo|mi caja|en caja|saldo)\b", "caja"),
     (r"\b(fiados|quien me debe|cuanto me deben|me deben)\b\??$", "fiados"),
-    (r"\b(mis metas|como va mi meta|mi meta|cuanto me falta)\b", "metas"),
+    (r"\b(mis metas|como va mi meta|mi meta|cuanto me falta)\b|^(metas?|ver metas|proponme (una )?meta|que meta me pongo)$", "metas"),
     (r"\b(stock|inventario|mercaderia que tengo|que me queda|cuanto me queda)\b\??$", "inventario"),
     (r"^(?:y )?(?:cuant[oa]s?|que tanto) (?:de )?(?:[a-zñ]+ ){0,3}(?:me queda|me quedan|queda|quedan|tengo)\b", "inventario"),
     (r"\b(informe|reporte)\b", "informe"),

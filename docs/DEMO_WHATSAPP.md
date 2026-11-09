@@ -1,6 +1,6 @@
 # Demostración completa de Kallpa por WhatsApp (guion para presentar)
 
-Probado mensaje por mensaje con la misma lógica del servidor: 54 mensajes, 0 «no te entendí»; 33 pruebas automáticas.
+Probado mensaje por mensaje con la misma lógica del servidor: 51 mensajes, 0 «no te entendí»; 35 pruebas automáticas.
 Escribe **cada línea como un mensaje aparte** en el chat «Twilio Sandbox» y espera la respuesta.
 
 ## Antes de presentar (10 minutos antes)
@@ -39,7 +39,13 @@ Escribe **cada línea como un mensaje aparte** en el chat «Twilio Sandbox» y e
 | `eso es todo` | Última pregunta: cuenta la plata de tu monedero. ¿Cuánto es? |
 | `tengo 80 soles en el monedero y 50 en el yape` | Así quedó tu negocio: (productos, precios, costos, stock, gastos y plata) ¿Está bien así? |
 | `el tomate es a 3.50` | Corregido. (resumen con el tomate a S/ 3.50) |
-| `sí` | ¡Todo listo, Juana! 🎉 |
+| `sí` | ¡Todo listo, Juana! 🎉 … 🎯 Ahora lo más importante: ponerte una meta. Te propongo: 1️⃣ Reponer tu mercadería: S/ 170 en 7 días (S/ 24.29 al día) · 2️⃣ Tus gastos fijos del mes: S/ 600 para el 1 de diciembre (S/ 27.27 al día) · 3️⃣ Un colchón para emergencias: S/ 300 en 2 meses (S/ 5 al día). ¿Con cuál te gustaría comenzar? |
+| `¿por qué la 1?` | Es lo que te cuesta volver a llenar tu puesto (tomate, papa, cebolla…). Si la juntas, nunca te quedas sin mercadería ni tienes que pedir prestado. ¿La empezamos? |
+| `la 2` | ✓ ¡Meta guardada! «Mis gastos fijos del mes»: S/ 600 para el 1 de diciembre, separando S/ 27.27 al día |
+
+> *Mensaje:* «Apenas conoce el negocio, Kallpa le propone metas con SUS números y le explica por qué, en corto.»
+> Otras preguntas que entiende: `¿por qué?`, `¿por qué la 3?`, `ver las otras`, `la 1 pero con 200`, `las tres`, `ninguna`.
+> Si no elige ninguna, se lo recuerda en el resumen y en el cierre del día; con `metas` se las vuelve a proponer.
 
 ## Acto 2 · Un día de venta, escribiendo (2 min)
 > *Mensaje:* «Se guarda al toque, sin confirmar. Solo pregunta lo que falta.»
@@ -86,7 +92,7 @@ lo que se registra es lo mismo. Lo escrito siempre lo procesan las reglas de Kal
 | `qué es el flujo de caja` | «…salió más plata de la que entró: S/ 16.50 menos. Es normal si compraste mercadería (S/ 40): esa plata vuelve cuando la vendas.» |
 | `qué es el margen` | Papa: la vendes a S/ 2.50 y te deja S/ 0.70 (28%) |
 | `cuánto tengo que vender` | Tus gastos fijos son S/ 600 al mes… Necesitas vender unos S/ 31 al día |
-| `quiero ahorrar 300 soles para fin de mes` | Meta guardada |
+| `guardé 10 para mi meta` → `efectivo` | ✓ S/ 10 para «Mis gastos fijos del mes» · vas al 2% |
 | `Juan se llevó un kilo de cebolla fiado` | ✓ te debe S/ 3 (Juan) |
 | `a quién tengo que cobrar` | Por cobrar (S/ 3): Juan S/ 3, de hoy. *(la lista es para Juana, no se le escribe a Juan)* |
 
