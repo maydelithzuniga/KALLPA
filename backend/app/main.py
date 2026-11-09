@@ -956,8 +956,13 @@ async def twilio_wait(request: Request, sid: str, n: int = 1):
     if not _twilio_signed(request, form):
         raise HTTPException(401, "Firma de Twilio inválida")
     job = _TW_JOBS.get(sid)
-    if not job:
-        return Response(content=twilio_wa.twiml([]), media_type="application/xml")
+    if not job:   # el servidor se reinició mientras procesaba (p. ej. una actualización): avisar, no quedarse callada
+        with SessionLocal() as db:
+            done = db.scalar(select(M.ProcessedMessage).where(M.ProcessedMessage.message_id == f"tw:{sid}"))
+        if done and done.response and done.response.get("reply"):
+            return Response(content=twilio_wa.twiml([{"body": done.response["reply"], "media_url": None}]), media_type="application/xml")
+        return Response(content=twilio_wa.twiml([{"body": "Se me cortó un momento 🙏. ¿Me lo repites?", "media_url": None}]),
+                        media_type="application/xml")
     from starlette.concurrency import run_in_threadpool
     if await run_in_threadpool(job["done"].wait, _TW_WAIT_S):
         _TW_JOBS.pop(sid, None)

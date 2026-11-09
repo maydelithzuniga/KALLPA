@@ -991,3 +991,12 @@ def test_43_fin_de_mes_pregunta_si_o_si_por_el_informe_a_los_bancos(client, shop
         monkeypatch.setattr(notify, "today_lima", lambda: last)
         ns = notify.run(db, b, force="fin_mes")
         assert ns and ns[-1].kind == "fin_mes" and "bancos aliados (BCP y Mibanco)" in ns[-1].text
+
+
+def test_44_si_el_servidor_se_reinicia_no_se_queda_callada(client, monkeypatch):
+    from app.config import settings
+    for k, v in {"whatsapp_enabled": True, "whatsapp_provider": "twilio", "twilio_account_sid": "AC", "twilio_auth_token": "t",
+                 "twilio_validate": False}.items():
+        monkeypatch.setattr(settings, k, v)
+    r = client.post("/webhook/twilio/espera?sid=SMperdido&n=2", data={"MessageSid": "SMperdido", "From": "whatsapp:+51999"})
+    assert "Se me cortó un momento" in r.text
