@@ -113,6 +113,23 @@ Las respuestas con IA (audios y coach) pueden variar en palabras; los registros 
 | `¿debo sacar RUC?` | • Para negocios pequeños existe el Nuevo RUS: pagas una cuota fija al mes y emites boletas simples. / • Tener RUC te ayuda a vender a empresas y a pedir créditos con mejores condiciones. / • Confirma tu categoría en SUNAT (sunat.gob.pe) o en una oficina; es un trámite gratuito. / 👉 Hoy: averigua en la web de SUNAT los… |
 | `¿cómo separo la plata de la casa?` | • Ganas unos S/ 298.50 al mes: separa S/ 2 cada día al cerrar (20%). / • Págate un sueldo fijo para la casa y anótalo como «para la casa»: así no mezclas plata. / • Te deben S/ 1.75: cobrar eso es la plata más barata que tienes. / 👉 Hoy: dime al cerrar «separé 10 para mi meta». |
 
+## Acto 8b · Preguntas teóricas de finanzas, explicadas sencillo y con sus números
+
+| Tú escribes | Kallpa responde |
+|---|---|
+| `qué son gastos fijos` | 📘 Gastos fijos: son los pagos que haces igual, vendas mucho o poco… Ejemplo: … En tu negocio: tus gastos fijos son alquiler del puesto, luz…: S/ 600 al mes (S/ 20 al día). |
+| `diferencia entre gastos fijos y variables` | 📘 Gastos fijos… 📘 Gastos variables… (los dos, con sus números) |
+| `¿qué es la TCEA?` | 📘 TCEA: cuánto te cuesta DE VERDAD un préstamo… compara la más baja… En tu negocio: podrías pagar hasta S/ … de cuota |
+| `¿qué es el capital de trabajo?` | 📘 … En tu negocio: tienes S/ … en caja, S/ … en mercadería y S/ … por cobrar |
+| `¿qué es la central de riesgo?` | 📘 Registro de cómo pagas (SBS, Infocorp, Sentinel)… |
+| `¿qué es el leasing?` | 📘 Leasing: alquilar un equipo pagando cuotas y al final quedártelo… |
+
+Más de 40 conceptos en el glosario (gastos fijos y variables, margen, ganancia, flujo, capital de trabajo, punto de
+equilibrio, liquidez, rotación, merma, TCEA/TEA, cuota, central de riesgo, garantía, sobreendeudamiento, «gota a gota»,
+ahorro, interés compuesto, inflación, presupuesto, inversión, IGV, RUC/Nuevo RUS, boleta/factura, leasing, factoring,
+línea de crédito, tarjeta de crédito, refinanciar, periodo de gracia, cajas y cooperativas, seguros…).
+Si preguntan algo que no está, Kallpa consulta a Gemini con búsqueda de Google y, si no responde, la API de Wikipedia.
+
 ## Acto 9 · Informe para el banco
 
 | Tú escribes | Kallpa responde |

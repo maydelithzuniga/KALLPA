@@ -292,7 +292,9 @@ def rules_answer(db, b: M.Business, question: str, today: date) -> str:
                          f"(un crédito de unos {soles(advisor.loan_for_installment(cap['installment_cents'], 12))} a 12 meses).")
         hoy = "escribe «quiero una meta» y armamos tu plan para crecer."
     else:
-        if not re.search(r"\b(negocio|vender|venta|ventas|ganar|ganancia|plata|dinero|caja|cliente|producto|puesto|tienda)\b", t):
+        if not re.search(r"\b(negocio|vender|venta|ventas|ganar|ganancia|plata|dinero|caja|cliente|producto|puesto|tienda|gasto|gastos|"
+                         r"costo|costos|precio|credito|prestamo|deuda|ahorro|banco|tasa|interes|margen|flujo|capital|impuesto|"
+                         r"sunat|ruc|igv|mercaderia|inventario|stock|fiado)\b", t):
             lines.append("Eso se sale de lo que sé 😅, pero de tu negocio sí te puedo ayudar. Por ejemplo:")
         lines.append(advisor.advice_text(db, b, today).split("\n\n")[0].replace("💡 Mis consejos para tu negocio:\n", ""))
         hoy = "pregúntame algo más concreto, por ejemplo «¿cómo consigo más clientes?»."

@@ -505,6 +505,12 @@ def parse(text: str, products: list[ProductRef], today: date) -> Parsed:
         p.fields["balances"] = _balances(t)
         return p
 
+    # --- pregunta teórica de finanzas («¿qué son los gastos fijos?», «¿qué es la TCEA?»): glosario + API
+    from . import finance_kb as _fkb
+    if _fkb.is_theory_question(t) and not any(re.search(pat, t) for pat, it in QUESTION_PATTERNS if it.startswith("explica_")):
+        p.intent = "teoria"
+        return p
+
     # --- pregunta abierta de negocio para el coach («¿cómo consigo más clientes?», «¿subo el precio del tomate?»)
     from . import coach as _coach
     if _coach.is_coach_question(t, "?" in (text or "") or "¿" in (text or "")) and not _has(t, r"\b(prestamo|prestamos|credito|creditos|financiamiento|prestarian)\b") \

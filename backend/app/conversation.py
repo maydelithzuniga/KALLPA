@@ -134,7 +134,7 @@ class Engine:
             r = goals_coach.reply(self, draft, text, parsed.intent)
             if r is not None:
                 return r
-            if parsed.intent.startswith(("resumen", "explica", "caja", "fiados", "inventario", "consejos", "reponer", "ayuda", "credito", "coach")):
+            if parsed.intent.startswith(("resumen", "explica", "caja", "fiados", "inventario", "consejos", "reponer", "ayuda", "credito", "coach", "teoria")):
                 r = self.answer_question(parsed.intent, parsed.text)
                 r["reply"] += "\n\n🎯 ¿Y con qué meta empiezas? Responde 1, 2 o 3."
                 r["draft"] = self.draft_view(draft)
@@ -355,6 +355,9 @@ class Engine:
                 return self.resp(cash["missing_text"])
             return self.resp(f"Según tu caja y tus pagos registrados, hoy puedes usar {soles(max(0, cash['available_for_restock_cents']))} para reponer. "
                              "Dime «quiero reponer mercadería por 200» y lo sigo como meta.")
+        if intent == "teoria":
+            from . import finance_kb
+            return self.resp(finance_kb.answer(db, b, text, self.today), quick=["Dame consejos", "¿Qué es la TCEA?"])
         if intent == "coach":
             from . import coach
             return self.resp(coach.answer(db, b, text, self.today, self.channel),
@@ -437,7 +440,7 @@ class Engine:
             d.status = "cancelado"
             self.db.flush()
             return None
-        if p.intent.startswith(("resumen", "explica", "caja", "fiados", "metas", "inventario", "consejos", "reponer", "ayuda", "credito", "coach", "informe")) \
+        if p.intent.startswith(("resumen", "explica", "caja", "fiados", "metas", "inventario", "consejos", "reponer", "ayuda", "credito", "coach", "informe", "teoria")) \
                 and p.intent != "valor":
             r = self.answer_question(p.intent, p.text)
             r["reply"] += " (Sigo esperando tu respuesta sobre lo anterior.)"

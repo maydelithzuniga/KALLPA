@@ -902,3 +902,52 @@ def test_41_coach_de_negocios_con_ia_y_respaldo(client, shop, chat, monkeypatch)
         raise httpx.ReadTimeout("timed out")
     monkeypatch.setattr(httpx, "post", boom)
     assert "👉 Hoy:" in chat("¿cómo hago promociones?")["reply"]
+
+
+def test_42_preguntas_teoricas_glosario_ia_con_busqueda_y_wikipedia(client, shop, chat, monkeypatch):
+    """«¿qué son los gastos fijos?»: glosario + sus números; concepto raro: Gemini con Google Search; si falla, Wikipedia."""
+    import httpx
+    from app import agent
+    from app.config import settings
+    chat("pago 250 de alquiler al mes")
+    r = chat("que son gastos fijos")["reply"]
+    assert r.startswith("📘 Gastos fijos:") and "En tu negocio: Tus gastos fijos son alquiler: S/ 250 al mes" in r
+    r = chat("diferencia entre gastos fijos y variables")["reply"]
+    assert "📘 Gastos fijos" in r and "📘 Gastos variables" in r
+    assert chat("¿qué es la TCEA?")["reply"].startswith("📘 TCEA")
+    assert "📘 Flujo" not in chat("¿qué es el flujo de caja?")["reply"]      # sigue la explicación de siempre con sus números
+    # concepto fuera del glosario: Gemini con búsqueda de Google
+    monkeypatch.setattr(settings, "agent_enabled", True)
+    monkeypatch.setattr(settings, "gemini_api_key", "k")
+    monkeypatch.setattr(agent, "audio_model_candidates", lambda: ["gemini-x"])
+    seen = []
+
+    class R:
+        status_code = 200
+        def raise_for_status(self):
+            pass
+        def json(self):
+            return {"candidates": [{"content": {"parts": [{"text": "El crowdfunding es juntar plata de muchas personas.\nEn tu negocio: …"}]}}]}
+    monkeypatch.setattr(httpx, "post", lambda url, json=None, headers=None, timeout=None: seen.append(json) or R())
+    r = chat("¿qué es el crowdfunding?")["reply"]
+    assert r.startswith("📘 El crowdfunding") and seen[-1]["tools"] == [{"google_search": {}}]
+    assert "CONTEXTO" in seen[-1]["system_instruction"]["parts"][0]["text"]
+    # si la IA falla: Wikipedia
+    def boom(*a, **k):
+        raise httpx.ReadTimeout("timed out")
+    monkeypatch.setattr(httpx, "post", boom)
+
+    class G:
+        def __init__(self, js):
+            self._js = js
+        def raise_for_status(self):
+            pass
+        def json(self):
+            return self._js
+    def get(url, params=None, headers=None, timeout=None):
+        if "w/api.php" in url:
+            return G({"query": {"search": [{"title": "Micromecenazgo"}]}})
+        return G({"extract": "El micromecenazgo es la cooperación colectiva. Se usa para financiar proyectos. Otra frase."})
+    monkeypatch.setattr(httpx, "get", get)
+    r = chat("¿qué es el micromecenazgo?")["reply"]
+    assert r.startswith("📘 Micromecenazgo: El micromecenazgo es la cooperación colectiva. Se usa para financiar proyectos.")
