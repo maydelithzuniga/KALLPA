@@ -441,7 +441,7 @@ def fake_agent(monkeypatch):
                         "respuesta_voz": "¡Bien! Registré tu venta."},
         "gasté quince en pasajes": {"transcripcion": "gasté quince en pasajes",
                                    "intent": {"tipo": "gasto", "monto": 15, "metodo_pago": None, "descripcion": "pasajes"}, "respuesta_voz": ""},
-        "¿me conviene abrir los domingos?": {"transcripcion": "¿me conviene abrir los domingos?", "intent": {"tipo": "consulta"},
+        "mmm no sé qué decirte": {"transcripcion": "mmm no sé qué decirte", "intent": {"tipo": "consulta"},
                                "respuesta_voz": "Vas muy bien, Ana: este mes llevas S/ 40 en ventas."},
     }
     calls = []
@@ -468,7 +468,7 @@ def test_15_agente_en_chat_de_la_app_texto_y_audio(client, shop, fake_agent):
     assert r["reply"] == "Gasto del negocio: movilidad y fletes, S/ 15. ¿Salió del efectivo o del Yape?"
     r = client.post(f"/api/businesses/{bid}/chat", json={"text": "efectivo", "message_id": "ag-3"}).json()   # pregunta abierta: sin IA
     assert r["movement"]["amount_cents"] == 1500 and fake_agent == ["audio"]   # lo escrito que entienden las reglas no usa IA
-    r = client.post(f"/api/businesses/{bid}/chat", json={"text": "¿me conviene abrir los domingos?", "message_id": "ag-4"}).json()
+    r = client.post(f"/api/businesses/{bid}/chat", json={"text": "mmm no sé qué decirte", "message_id": "ag-4"}).json()
     assert r["reply"].startswith("Vas muy bien")
 
 
@@ -855,3 +855,50 @@ def test_40_asesor_metas_consejos_y_prestamos(client, shop, chat):
     r = chat("puedo pedir un crédito de 2000?")["reply"]
     assert r.startswith("Un préstamo de S/ 2,000 a 12 meses sería una cuota de unos")
     assert chat("vendí 2 polos al crédito a Ana")["reply"].startswith("✓")   # «al crédito» sigue siendo fiado
+
+
+def test_41_coach_de_negocios_con_ia_y_respaldo(client, shop, chat, monkeypatch):
+    """Preguntas de negocio: el coach responde con IA (contexto del negocio + memoria) o con reglas si la IA falla."""
+    import httpx
+    from app import agent
+    from app.config import settings
+    chat("vendí 2 polos en efectivo")
+    # sin IA: reglas con sus números
+    r = chat("¿subo el precio del polo a 25?")
+    assert "Polo: precio S/ 20, costo S/ 12" in r["reply"] and "👉 Hoy:" in r["reply"]
+    from app.db import SessionLocal
+    from app import models as M
+    with SessionLocal() as db:   # «¿subo el precio…?» no cambia el precio
+        assert db.query(M.Product).filter_by(name="Polo").first().price_cents == 2000
+    assert "👉 Hoy:" in chat("¿cómo consigo más clientes?")["reply"]
+    assert "Nuevo RUS" in chat("¿debo sacar RUC?")["reply"]
+    assert "se sale de lo que sé" in chat("¿qué opinas del clima?")["reply"]
+    # con IA
+    monkeypatch.setattr(settings, "agent_enabled", True)
+    monkeypatch.setattr(settings, "gemini_api_key", "k")
+    monkeypatch.setattr(agent, "audio_model_candidates", lambda: ["gemini-x"])
+    seen = []
+
+    class R:
+        status_code = 200
+        def raise_for_status(self):
+            pass
+        def json(self):
+            return {"candidates": [{"content": {"parts": [{"text": "• Arma un **combo** de polos\n👉 Hoy: sube tu estado"}]}}]}
+
+    def post(url, json=None, headers=None, timeout=None):
+        seen.append(json)
+        return R()
+    monkeypatch.setattr(httpx, "post", post)
+    r = chat("¿cómo hago promociones?")["reply"]
+    assert r == "• Arma un combo de polos\n👉 Hoy: sube tu estado"          # sin asteriscos de markdown
+    body = seen[-1]
+    sysmsg = body["system_instruction"]["parts"][0]["text"]
+    assert "asesora de negocios, consultora empresarial y coach financiera" in sysmsg
+    assert "margen_por_producto" in sysmsg and "Polo" in sysmsg and "capacidad_credito" in sysmsg
+    assert any("¿debo sacar RUC?" in c["parts"][0]["text"] for c in body["contents"][:-1])   # memoria de la conversación
+    # si la IA falla, responde con reglas
+    def boom(*a, **k):
+        raise httpx.ReadTimeout("timed out")
+    monkeypatch.setattr(httpx, "post", boom)
+    assert "👉 Hoy:" in chat("¿cómo hago promociones?")["reply"]

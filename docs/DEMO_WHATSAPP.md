@@ -112,6 +112,22 @@ lo que se registra es lo mismo. Lo escrito siempre lo procesan las reglas de Kal
 Con un negocio recién creado (pocos días de datos), Kallpa explica la regla (cuota ≤ 30% de lo que ganas) y pide
 registrar unas semanas; con meses de datos verificados por Yape da montos concretos.
 
+## Acto 4c · Asesora de negocios y coach para MYPES (1 min)
+> *Mensaje:* «Pregúntale lo que le preguntarías a una consultora: responde con SUS números y una acción para hoy.»
+
+| Juana pregunta | Kallpa responde (resumido) |
+|---|---|
+| `¿cómo consigo más clientes?` | • Ofrece primero lo que más te deja (…) • Tu mejor día es sábado y el más flojo martes: ese día haz una yapa o combo • QR de Yape a la vista… 👉 Hoy: … |
+| `¿subo el precio del tomate?` | Tomate: precio S/ 3.50, costo S/ 2, te deja 43%… (no cambia el precio: solo aconseja) |
+| `mi vecina vende más barato, ¿qué hago?` | No entres a una guerra de precios: compite con frescura, atención, yapa y Yape… |
+| `¿me conviene abrir los domingos?` | Lo que vendes por día en promedio… compáralo con tu día más flojo… |
+| `¿debo sacar RUC?` | Nuevo RUS: cuota fija al mes, boletas simples… confírmalo en SUNAT |
+| `¿cómo separo la plata de la casa?` | Ganas unos S/ X al mes: separa S/ Y cada día… págate un sueldo fijo… |
+| `¿me conviene contratar un ayudante?` / `¿cómo hago crecer mi negocio?` | Con su ganancia, sus gastos fijos y su capacidad de crédito |
+
+Con la IA activa (Gemini), las respuestas son más naturales y recuerdan lo que se habló («¿y cómo hago eso?»);
+si la IA no responde, Kallpa contesta igual con reglas y los mismos números. Funciona igual en la app y en WhatsApp.
+
 ## Acto 5 · Cierre del día contando la plata (1 min)
 | Juana escribe | Kallpa responde |
 |---|---|

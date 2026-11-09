@@ -134,7 +134,7 @@ class Engine:
             r = goals_coach.reply(self, draft, text, parsed.intent)
             if r is not None:
                 return r
-            if parsed.intent.startswith(("resumen", "explica", "caja", "fiados", "inventario", "consejos", "reponer", "ayuda", "credito")):
+            if parsed.intent.startswith(("resumen", "explica", "caja", "fiados", "inventario", "consejos", "reponer", "ayuda", "credito", "coach")):
                 r = self.answer_question(parsed.intent, parsed.text)
                 r["reply"] += "\n\n🎯 ¿Y con qué meta empiezas? Responde 1, 2 o 3."
                 r["draft"] = self.draft_view(draft)
@@ -355,6 +355,10 @@ class Engine:
                 return self.resp(cash["missing_text"])
             return self.resp(f"Según tu caja y tus pagos registrados, hoy puedes usar {soles(max(0, cash['available_for_restock_cents']))} para reponer. "
                              "Dime «quiero reponer mercadería por 200» y lo sigo como meta.")
+        if intent == "coach":
+            from . import coach
+            return self.resp(coach.answer(db, b, text, self.today, self.channel),
+                             quick=["Dame consejos", "¿Cuánto me prestarían?"])
         if intent == "consejos":
             from . import advisor
             return self.resp(advisor.advice_text(db, b, self.today), quick=["Quiero una meta", "¿Cuánto me prestarían?"])
@@ -393,6 +397,10 @@ class Engine:
         if intent == "ayuda":
             name = f" {self.b.owner_name}" if self.b.owner_name else ""
             return self.resp(f"¡Hola{name}! " + summaries.help_text(db, b))
+        from . import coach
+        if text and (("?" in text or "¿" in text) or coach.looks_like_question(nlu.normalize(text))):
+            # una pregunta que las reglas no conocen: la responde el coach (con IA si está activa)
+            return self.resp(coach.answer(db, b, text, self.today, self.channel), quick=["Dame consejos", "Resumen de hoy"])
         return self.resp("No te entendí bien. " + summaries.help_text(db, b), quick=["Resumen de hoy", "¿Cuánto tengo?"])
 
     # ------------------------------------------------------------ borradores
@@ -422,7 +430,7 @@ class Engine:
             d.status = "cancelado"
             self.db.flush()
             return None
-        if p.intent.startswith(("resumen", "explica", "caja", "fiados", "metas", "inventario", "consejos", "reponer", "ayuda", "credito")) \
+        if p.intent.startswith(("resumen", "explica", "caja", "fiados", "metas", "inventario", "consejos", "reponer", "ayuda", "credito", "coach")) \
                 and p.intent != "valor":
             r = self.answer_question(p.intent, p.text)
             r["reply"] += " (Sigo esperando tu respuesta sobre lo anterior.)"

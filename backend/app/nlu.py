@@ -449,6 +449,10 @@ def parse(text: str, products: list[ProductRef], today: date) -> Parsed:
     if _has(t, r"^(deshacer|deshaz|deshazlo|deshaslo|borra eso|borralo|anula eso|anulalo|eso no era|me equivoque borra)\b"):
         p.intent = "deshacer"
         return p
+    # --- «¿cuánto vendí / gané / cobré / gasté hoy?» es una pregunta, no una venta
+    if _has(t, r"^(cuanto|cuanta|que tanto) (vendi|vendimos|gane|ganamos|cobre|gaste|gastamos|saque)\b"):
+        p.intent = "resumen_semana" if _has(t, r"\bsemana\b") else "resumen_mes" if _has(t, r"\bmes\b") else "resumen_dia"
+        return p
     # --- cobrar un fiado (mensaje listo para la casera)
     if _has(t, r"^(cobrar|cobrale|cobrarle|a quien (le )?tengo que cobrar|a quienes tengo que cobrar|quien me debe|quienes me deben|lista de (cobros|fiados)|que me deben)\b"):
         p.intent = "cobrar"
@@ -499,6 +503,13 @@ def parse(text: str, products: list[ProductRef], today: date) -> Parsed:
     if _has(t, r"\b(empiezo|empece|arranco|inicio|saldo inicial|para empezar|al empezar|comienzo)\b") and find_amounts(t):
         p.intent = "saldo_inicial"
         p.fields["balances"] = _balances(t)
+        return p
+
+    # --- pregunta abierta de negocio para el coach («¿cómo consigo más clientes?», «¿subo el precio del tomate?»)
+    from . import coach as _coach
+    if _coach.is_coach_question(t, "?" in (text or "") or "¿" in (text or "")) and not _has(t, r"\b(prestamo|prestamos|credito|creditos|financiamiento|prestarian)\b") \
+            and not any(re.search(pat, t) for pat, it in QUESTION_PATTERNS if it not in ("consejos", "ayuda")):
+        p.intent = "coach"
         return p
 
     # --- catálogo: precio/costo/stock de un producto

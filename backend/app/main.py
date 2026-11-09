@@ -926,7 +926,7 @@ async def twilio_receive(request: Request, background: BackgroundTasks):
     items: list = []
     if m and settings.whatsapp_available:
         m["provider"] = "twilio"
-        if m.get("type") == "audio":
+        if True:   # audios y preguntas al coach pueden tardar: segundo plano + <Redirect> si pasa de 11 s
             import threading
             job = {"done": threading.Event(), "items": [], "t": __import__("time").time()}
             _TW_JOBS[m["id"]] = job

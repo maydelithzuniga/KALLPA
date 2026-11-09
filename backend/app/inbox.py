@@ -40,6 +40,8 @@ def _rules_understand(db: Session, b: M.Business, conv: str, channel: str, text:
     from .conversation import Engine
     from .nlu import parse
     eng = Engine(db, b, conv, channel)
+    if "?" in text or "¿" in text:
+        return True   # las preguntas las responde el coach (con IA y los números del negocio), no el clasificador
     return parse(text, eng.products(), eng.today).intent not in ("desconocido", "valor", "")
 
 
