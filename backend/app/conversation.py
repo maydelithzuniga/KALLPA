@@ -1557,7 +1557,7 @@ class Engine:
     def consent(self, yes: bool, d: M.Draft | None = None) -> dict[str, Any]:
         from . import bank_consent
         from .config import settings
-        m = date.fromisoformat(d.data["month"] + "-01") if d else (self.pending_consent_month() or bank_consent.report_month(self.today))
+        m = date.fromisoformat(d.data["month"] + "-01") if d else (self.pending_consent_month() or month_start(self.today))
         key = m.strftime("%Y-%m")
         existing = self.db.scalar(select(M.ReportConsent).where(M.ReportConsent.business_id == self.b.id, M.ReportConsent.month == key))
         if not existing:
