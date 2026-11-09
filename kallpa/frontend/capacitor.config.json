@@ -1,0 +1,12 @@
+{
+  "appId": "pe.kallpa.asistente",
+  "appName": "Kallpa",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

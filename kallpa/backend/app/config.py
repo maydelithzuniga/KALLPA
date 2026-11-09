@@ -1,0 +1,68 @@
+"""Configuración por variables de entorno (lee también un archivo .env si existe)."""
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def _load_dotenv() -> None:
+    env_file = BASE_DIR / ".env"
+    if not env_file.exists():
+        return
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip())
+
+
+_load_dotenv()
+
+
+def _bool(name: str, default: bool) -> bool:
+    return os.getenv(name, str(default)).strip().lower() in {"1", "true", "yes", "si", "sí"}
+
+
+@dataclass
+class Settings:
+    database_url: str = field(default_factory=lambda: os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'kallpa.db'}"))
+    seed_demo: bool = field(default_factory=lambda: _bool("SEED_DEMO", True))
+    whisper_model: str = field(default_factory=lambda: os.getenv("WHISPER_MODEL", "base"))
+    whisper_model_dir: str = field(default_factory=lambda: os.getenv("WHISPER_MODEL_DIR", str(BASE_DIR / "models")))
+    whisper_device: str = field(default_factory=lambda: os.getenv("WHISPER_DEVICE", "cpu"))
+    whisper_compute_type: str = field(default_factory=lambda: os.getenv("WHISPER_COMPUTE_TYPE", "int8"))
+    gemini_enabled: bool = field(default_factory=lambda: _bool("GEMINI_ENABLED", False))
+    gemini_api_key: str = field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
+    gemini_model: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-3.8-flash"))
+    whatsapp_enabled: bool = field(default_factory=lambda: _bool("WHATSAPP_ENABLED", False))
+    whatsapp_token: str = field(default_factory=lambda: os.getenv("WHATSAPP_TOKEN", ""))
+    whatsapp_phone_number_id: str = field(default_factory=lambda: os.getenv("WHATSAPP_PHONE_NUMBER_ID", ""))
+    whatsapp_verify_token: str = field(default_factory=lambda: os.getenv("WHATSAPP_VERIFY_TOKEN", ""))
+    whatsapp_app_secret: str = field(default_factory=lambda: os.getenv("WHATSAPP_APP_SECRET", ""))
+    whatsapp_graph_version: str = field(default_factory=lambda: os.getenv("WHATSAPP_GRAPH_VERSION", "v21.0"))
+    cors_origins: list[str] = field(
+        default_factory=lambda: [o.strip() for o in os.getenv(
+            "CORS_ORIGINS",
+            "http://localhost:5173,http://127.0.0.1:5173,capacitor://localhost,http://localhost",
+        ).split(",") if o.strip()]
+    )
+
+    @property
+    def gemini_available(self) -> bool:
+        return self.gemini_enabled and bool(self.gemini_api_key)
+
+    @property
+    def whatsapp_available(self) -> bool:
+        return (
+            self.whatsapp_enabled
+            and bool(self.whatsapp_token)
+            and bool(self.whatsapp_phone_number_id)
+            and bool(self.whatsapp_app_secret)
+        )
+
+
+settings = Settings()
