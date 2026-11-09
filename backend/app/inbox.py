@@ -56,14 +56,16 @@ def receive(db: Session, b: M.Business, *, message_id: str, channel: str, conver
     agent_error = None
     via_voice = audio is not None
     if audio is not None:
+        heard = False
         if agent.enabled():
             try:
-                agent_data = agent.analyze(db, b, audio=audio, mime_type=mime_type)
-                text = agent_data.get("transcripcion") or ""
+                # solo transcribir (rápido, WhatsApp espera máx. 15 s): las reglas de Kallpa entienden el texto
+                text = agent.transcribe_audio(audio, mime_type=mime_type)
+                heard = True
             except agent.AgentUnavailable as e:
                 log.warning("La IA (Gemini) no pudo con el audio, intento Whisper: %s", e)
                 agent_error = str(e)
-        if agent_data is None:
+        if not heard:
             try:
                 text = transcribe.transcribe_bytes(audio, suffix)   # puede lanzar TranscriptionUnavailable
             except transcribe.TranscriptionUnavailable as e:

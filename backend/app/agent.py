@@ -118,7 +118,7 @@ def business_context(db, b) -> dict[str, Any]:
 
 
 def analyze(db, b, *, text: str | None = None, audio: bytes | None = None, mime_type: str = "audio/ogg",
-            timeout: float = 30.0) -> dict[str, Any]:
+            timeout: float = 9.0) -> dict[str, Any]:
     """process_user_audio() de Women2, ahora para audio o texto. Devuelve {transcripcion, intent, respuesta_voz}."""
     if not enabled():
         raise AgentUnavailable("Agente de IA desactivado o sin GEMINI_API_KEY")
@@ -135,6 +135,8 @@ def analyze(db, b, *, text: str | None = None, audio: bytes | None = None, mime_
         "contents": [{"role": "user", "parts": parts}],
         "generationConfig": {"responseMimeType": "application/json", "responseSchema": RESPONSE_SCHEMA, "temperature": 0.1},
     }
+    if _thinking_ok and _thinking_ok[0]:   # misma forma de «pensar poco» que ya funcionó al transcribir
+        body["generationConfig"]["thinkingConfig"] = _thinking_ok[0]
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.agent_model}:generateContent"
     try:
         r = httpx.post(url, json=body, headers={"x-goog-api-key": settings.gemini_api_key}, timeout=timeout)
@@ -148,6 +150,46 @@ def analyze(db, b, *, text: str | None = None, audio: bytes | None = None, mime_
     data.setdefault("respuesta_voz", "")
     data["transcripcion"] = (data.get("transcripcion") or text or "").strip()
     return data
+
+
+# Qué forma de «pensar poco» acepta el modelo (se descubre en la primera llamada y se recuerda).
+_THINKING_OPTIONS = [{"thinkingLevel": "low"}, {"thinkingBudget": 0}, None]
+_thinking_ok: list[Any] = []
+
+TRANSCRIBE_PROMPT = ("Transcribe exactamente lo que dice este audio en español de Perú. Es una emprendedora contando "
+                     "ventas, gastos o preguntas de su negocio. Escribe los montos y cantidades con números "
+                     "(«dos kilos» → «2 kilos», «tres soles cincuenta» → «3.50 soles»). Devuelve SOLO el texto, sin comillas.")
+
+
+def transcribe_audio(audio: bytes, mime_type: str = "audio/ogg", timeout: float = 9.0) -> str:
+    """Solo transcribe (rápido): luego las reglas de Kallpa entienden el texto igual que si lo hubiera escrito.
+    WhatsApp por Twilio espera máximo 15 s la respuesta, así que esto tiene que ser corto."""
+    if not enabled():
+        raise AgentUnavailable("Agente de IA desactivado o sin GEMINI_API_KEY")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.agent_model}:generateContent"
+    parts = [{"inline_data": {"mime_type": mime_type, "data": base64.b64encode(audio).decode()}}, {"text": TRANSCRIBE_PROMPT}]
+    options = _thinking_ok[:1] or _THINKING_OPTIONS
+    last: Exception | None = None
+    for th in options:
+        gen: dict[str, Any] = {"temperature": 0, "maxOutputTokens": 400}
+        if th:
+            gen["thinkingConfig"] = th
+        body = {"contents": [{"role": "user", "parts": parts}], "generationConfig": gen}
+        try:
+            r = httpx.post(url, json=body, headers={"x-goog-api-key": settings.gemini_api_key}, timeout=timeout)
+            if r.status_code == 400 and th is not None and not _thinking_ok:
+                last = RuntimeError(r.text[:200])
+                continue   # este modelo no acepta esa opción: pruebo la siguiente
+            r.raise_for_status()
+            cand = r.json()["candidates"][0]
+            text = "".join(p.get("text", "") for p in cand.get("content", {}).get("parts", []) if not p.get("thought"))
+            if not _thinking_ok:
+                _thinking_ok.append(th)
+            return text.strip().strip("«»\"")
+        except (httpx.HTTPError, KeyError, IndexError) as e:
+            log.warning("Gemini no pudo transcribir: %s", e)
+            raise AgentUnavailable(str(e)) from e
+    raise AgentUnavailable(f"Gemini rechazó la configuración: {last}")
 
 
 async def text_to_speech_edge(text: str, output_path: str) -> str:

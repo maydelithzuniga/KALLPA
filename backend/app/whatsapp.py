@@ -127,7 +127,8 @@ def send_voice_reply(to: str, text: str, message_id: str) -> None:
     try:
         from .agent import text_to_speech_edge
         name = "r_" + "".join(ch for ch in message_id if ch.isalnum())[-40:] + ".mp3"
-        asyncio.run(text_to_speech_edge(text.replace("✓", "").replace("·", ","), str(VOICE_DIR / name)))
+        # máximo 3 s: la respuesta escrita no puede esperar a la voz (WhatsApp por Twilio espera 15 s en total)
+        asyncio.run(asyncio.wait_for(text_to_speech_edge(text.replace("✓", "").replace("·", ","), str(VOICE_DIR / name)), 3))
     except Exception as e:  # noqa: BLE001 (edge-tts no instalado o sin red)
         log.info("Sin respuesta de voz: %s", e)
         return

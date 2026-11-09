@@ -659,8 +659,8 @@ class Engine:
                 amb = data["ambiguous_price_cents"]
                 if not qty or qty == 1:
                     data["total_cents"] = data.pop("ambiguous_price_cents")
-                elif k == M.PURCHASE and ref_unit and abs(amb - ref_unit * qty) <= 0.25 * ref_unit * qty:
-                    data["total_cents"] = data.pop("ambiguous_price_cents")
+                elif ref_unit and abs(amb - ref_unit * qty) <= 0.25 * ref_unit * qty:
+                    data["total_cents"] = data.pop("ambiguous_price_cents")   # «2 polos a 40» con polo a 20: es el total
                 elif ref_unit and abs(amb - ref_unit) <= 0.25 * ref_unit and abs(amb - ref_unit * qty) > 0.25 * ref_unit * qty:
                     data["unit_price_cents"] = data.pop("ambiguous_price_cents")
                 else:

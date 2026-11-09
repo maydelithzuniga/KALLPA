@@ -130,12 +130,13 @@ def test_2b_audio_real_pasa_por_transcripcion_una_sola_vez(client, shop, monkeyp
 
 
 def test_2c_solo_pregunta_lo_que_falta(client, shop, chat):
-    r = chat("vendí tres polos a S/60")
-    assert "total o el precio de cada uno" in r["reply"]
-    r = chat("es el total")
-    assert r["reply"] == "Tres polos, S/ 60. ¿En efectivo o por Yape?" or "¿En efectivo o por Yape?" in r["reply"]
+    r = chat("vendí tres polos a S/60")          # polo a S/ 20: 3 × 20 = 60, es el total (no pregunta)
+    assert "¿En efectivo o por Yape?" in r["reply"]
     r = chat("en efectivo")
     assert r["movement"]["amount_cents"] == 6000 and r["movement"]["discount_cents"] == 0
+    r = chat("vendí 3 polos a 35")               # ni 20 c/u ni 60 en total: ahí sí pregunta
+    assert "total o el precio de cada uno" in r["reply"]
+    chat("cancelar")
     r = chat("vendí 2 polos a 25 cada uno por yape")
     assert r["movement"]["amount_cents"] == 5000 and r["movement"]["discount_cents"] == 0
     r = chat("vendí 2 polos por 40 por yape y por 30")
@@ -449,6 +450,11 @@ def fake_agent(monkeypatch):
         calls.append(text or "audio")
         return answers["audio-venta" if audio is not None else text]
     monkeypatch.setattr(agent, "analyze", analyze)
+
+    def transcribe_audio(audio, mime_type="audio/ogg", timeout=9.0):
+        calls.append("audio")
+        return answers["audio-venta"]["transcripcion"]
+    monkeypatch.setattr(agent, "transcribe_audio", transcribe_audio)
     return calls
 
 
@@ -456,7 +462,7 @@ def test_15_agente_en_chat_de_la_app_texto_y_audio(client, shop, fake_agent):
     bid = shop["id"]
     r = client.post(f"/api/businesses/{bid}/chat/audio", files={"audio": ("a.webm", io.BytesIO(b"x"), "audio/webm")},
                     data={"message_id": "ag-1"}).json()
-    assert r["agent"] and r["transcript"] == "vendí dos polos a cuarenta soles por yape"
+    assert r["transcript"] == "vendí dos polos a cuarenta soles por yape"   # Gemini solo transcribe; las reglas entienden
     assert r["reply"].startswith("✓ S/ 40 polo (2)") or r["movement"]["amount_cents"] == 4000
     r = client.post(f"/api/businesses/{bid}/chat", json={"text": "gasté quince en pasajes", "message_id": "ag-2"}).json()
     assert r["reply"] == "Gasto del negocio: movilidad y fletes, S/ 15. ¿Salió del efectivo o del Yape?"
@@ -672,3 +678,44 @@ def test_35_metas_propuestas_al_terminar_la_bienvenida(client):
     r = c("la 2")["reply"]
     assert r.startswith("✓ ¡Meta guardada! «Mis gastos fijos del mes»: S/ 290")
     assert "Aún no tienes una meta" not in c("resumen")["reply"]
+
+
+def test_36_gemini_transcribe_rapido_y_con_respaldo(client, monkeypatch):
+    """Gemini solo transcribe, «pensando poco»; si el modelo no acepta esa opción prueba otra; si tarda, avisa."""
+    import httpx
+    from app import agent, main, whatsapp
+    from app.config import settings
+    monkeypatch.setattr(settings, "agent_enabled", True)
+    monkeypatch.setattr(settings, "gemini_api_key", "k")
+    agent._thinking_ok.clear()
+    seen = []
+
+    class R:
+        def __init__(self, code, js=None):
+            self.status_code, self._js, self.text = code, js, "bad thinking"
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise httpx.HTTPStatusError("x", request=None, response=None)
+        def json(self):
+            return self._js
+
+    def post(url, json=None, headers=None, timeout=None):
+        seen.append((json["generationConfig"].get("thinkingConfig"), timeout))
+        if len(seen) == 1:
+            return R(400)
+        return R(200, {"candidates": [{"content": {"parts": [{"text": "pensando...", "thought": True}, {"text": "vendí 2 kilos de papa"}]}}]})
+    monkeypatch.setattr(httpx, "post", post)
+    assert agent.transcribe_audio(b"ogg") == "vendí 2 kilos de papa"
+    assert seen[0][0] == {"thinkingLevel": "low"} and seen[1][0] == {"thinkingBudget": 0} and seen[1][1] <= 10
+    agent.transcribe_audio(b"ogg")
+    assert seen[-1][0] == {"thinkingBudget": 0}    # recuerda la opción que funcionó
+
+    def slow(*a, **k):
+        raise httpx.ReadTimeout("The read operation timed out")
+    monkeypatch.setattr(httpx, "post", slow)
+    monkeypatch.setattr(settings, "whatsapp_enabled", True)
+    sent = []
+    monkeypatch.setattr(whatsapp, "send_text", lambda to, body, quick=None: sent.append(body))
+    main._wa_process([{"id": "slow1", "from": "51999000333", "type": "audio", "audio_bytes": b"ogg", "timestamp": None}])
+    assert "La IA no pudo escuchar tu audio" in sent[-1]
+    agent._thinking_ok.clear()
