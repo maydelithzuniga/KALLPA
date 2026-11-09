@@ -565,7 +565,7 @@ def advice(db: Session, business: M.Business) -> list[str]:
         if best["product_id"] != worst["product_id"]:
             ub = "kilo" if best.get("unit") == "kg" else (best.get("unit") or "unidad")
             uw = "kilo" if worst.get("unit") == "kg" else (worst.get("unit") or "unidad")
-            tips.append(f"El {best['name'].lower()} te deja {soles(best['margin_per_unit_cents'])} por {ub} y el "
+            tips.append(f"{best['name']} te deja {soles(best['margin_per_unit_cents'])} por {ub} y "
                         f"{worst['name'].lower()} solo {soles(worst['margin_per_unit_cents'])} por {uw}: ofrece más {best['name'].lower()}.")
         top_seller = max(margins, key=lambda m: m["revenue_cents"])
         best_total = max(margins, key=lambda m: m["margin_cents"] or 0)
@@ -595,7 +595,7 @@ def advice(db: Session, business: M.Business) -> list[str]:
     # 7. costos que subieron
     for a in cost_alerts(db, business):
         if a["pct"] >= 8:
-            tips.append(f"El {a['product'].lower()} te costó {a['pct']}% más que la semana pasada: sube un poco tu precio o busca otro puesto en el mayorista.")
+            tips.append(f"{a['product']} te costó {a['pct']}% más que la semana pasada: sube un poco tu precio o busca otro puesto en el mayorista.")
             break
     # 8. casa y negocio / metas
     month = period_stats(db, business, month_start(today), today + timedelta(days=1))

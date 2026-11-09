@@ -385,12 +385,15 @@ class Engine:
             from .report_pdf import analyze
             try:
                 a = analyze(db, b)
+                if not a["verification"]["verified"]:
+                    raise ValueError("sin Yape verificados")
                 resumen = (f"Ingreso mensual promedio verificado: {soles(a['capacity']['avg_income_cents'] or 0)}. "
                            f"Flujo neto: {soles(a['capacity']['avg_net_cents'] or 0)} al mes. "
                            f"Cuota disponible para un crédito: {soles(a['available_installment_cents'])}. "
                            f"Resultado: {a['profile'].lower()}.")
             except Exception:   # noqa: BLE001 (sin movimientos por Yape aún)
-                resumen = "Todavía no tengo suficientes movimientos por Yape verificados para un informe completo."
+                resumen = ("Todavía no tienes movimientos por Yape verificados: el informe solo usa lo verificado. "
+                           "Cobra por Yape y verifica tus Yape en la app (Más → Historial) para que se llene.")
             url = f"{settings.app_base_url}/api/businesses/{b.id}/report/pdf" if settings.app_base_url else None
             return self.resp("📄 Tu informe financiero para el banco (solo lo verificado por Yape). " + resumen
                              + ("" if url else " Lo descargas en la app, en «Informe BCP»."), media_url=url)
@@ -422,6 +425,10 @@ class Engine:
             d.status = "cancelado"
             self.db.commit()
             return self.resp("Listo, no lo guardé.")
+        if p.intent in ("cierre", "contar_plata", "cobrar"):
+            d.status = "cancelado"   # «cerrar mi día» y similares siempre pasan, aunque haya una pregunta pendiente
+            self.db.flush()
+            return None
         new_movement = p.intent in ("movimiento", "catalogo", "meta", "saldo_inicial", "conteo_stock", "conteo_caja",
                                     "corregir", "anular", "ahorro_meta", "cierre", "perdida") and not raw.lower().startswith("no")
         if new_movement and d.missing and not self._substantive(p):
@@ -430,7 +437,7 @@ class Engine:
             d.status = "cancelado"
             self.db.flush()
             return None
-        if p.intent.startswith(("resumen", "explica", "caja", "fiados", "metas", "inventario", "consejos", "reponer", "ayuda", "credito", "coach")) \
+        if p.intent.startswith(("resumen", "explica", "caja", "fiados", "metas", "inventario", "consejos", "reponer", "ayuda", "credito", "coach", "informe")) \
                 and p.intent != "valor":
             r = self.answer_question(p.intent, p.text)
             r["reply"] += " (Sigo esperando tu respuesta sobre lo anterior.)"
