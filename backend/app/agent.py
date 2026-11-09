@@ -153,7 +153,7 @@ def analyze(db, b, *, text: str | None = None, audio: bytes | None = None, mime_
 
 
 # Qué forma de «pensar poco» acepta el modelo (se descubre en la primera llamada y se recuerda).
-_THINKING_OPTIONS = [{"thinkingLevel": "low"}, {"thinkingBudget": 0}, None]
+_THINKING_OPTIONS = [{"thinkingLevel": "minimal"}, {"thinkingLevel": "low"}, {"thinkingBudget": 0}, None]
 _thinking_ok: list[Any] = []
 
 TRANSCRIBE_PROMPT = ("Transcribe exactamente lo que dice este audio en español de Perú. Es una emprendedora contando "
@@ -161,12 +161,14 @@ TRANSCRIBE_PROMPT = ("Transcribe exactamente lo que dice este audio en español 
                      "(«dos kilos» → «2 kilos», «tres soles cincuenta» → «3.50 soles»). Devuelve SOLO el texto, sin comillas.")
 
 
-def transcribe_audio(audio: bytes, mime_type: str = "audio/ogg", timeout: float = 9.0) -> str:
+def transcribe_audio(audio: bytes, mime_type: str = "audio/ogg", timeout: float = 45.0) -> str:
     """Solo transcribe (rápido): luego las reglas de Kallpa entienden el texto igual que si lo hubiera escrito.
     WhatsApp por Twilio espera máximo 15 s la respuesta, así que esto tiene que ser corto."""
     if not enabled():
         raise AgentUnavailable("Agente de IA desactivado o sin GEMINI_API_KEY")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.agent_model}:generateContent"
+    model = os.getenv("AGENT_AUDIO_MODEL") or settings.agent_model   # se puede usar un modelo más rápido solo para audio
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    t0 = __import__("time").time()
     parts = [{"inline_data": {"mime_type": mime_type, "data": base64.b64encode(audio).decode()}}, {"text": TRANSCRIBE_PROMPT}]
     options = _thinking_ok[:1] or _THINKING_OPTIONS
     last: Exception | None = None
@@ -185,6 +187,7 @@ def transcribe_audio(audio: bytes, mime_type: str = "audio/ogg", timeout: float 
             text = "".join(p.get("text", "") for p in cand.get("content", {}).get("parts", []) if not p.get("thought"))
             if not _thinking_ok:
                 _thinking_ok.append(th)
+            log.warning("Gemini transcribió en %.1f s (%s, %s)", __import__("time").time() - t0, model, th)
             return text.strip().strip("«»\"")
         except (httpx.HTTPError, KeyError, IndexError) as e:
             log.warning("Gemini no pudo transcribir: %s", e)

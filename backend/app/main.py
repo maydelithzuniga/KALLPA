@@ -873,34 +873,92 @@ async def wa_receive(request: Request, background: BackgroundTasks):
     return {"ok": True}
 
 
-@app.post("/webhook/twilio")
-async def twilio_receive(request: Request, background: BackgroundTasks):
-    """WhatsApp por Twilio (Sandbox). Configúralo en Twilio: «When a message comes in» = https://TU-URL/webhook/twilio (POST)."""
+def _twilio_signed(request: Request, form: dict[str, str]) -> bool:
     from . import twilio_wa
-    form = {k: str(v) for k, v in (await request.form()).items()}
     url = str(request.url)
     candidates = [url, url.replace("http://", "https://", 1)]
     if settings.app_base_url:
         q = ("?" + request.url.query) if request.url.query else ""
         candidates.insert(0, settings.app_base_url.rstrip("/") + request.url.path + q)
-    if not twilio_wa.verify_signature(candidates, form, request.headers.get("X-Twilio-Signature")):
+    return twilio_wa.verify_signature(candidates, form, request.headers.get("X-Twilio-Signature"))
+
+
+# Audios: Twilio espera máximo 15 s por respuesta y la IA puede tardar más. Se procesa en segundo plano y se le
+# responde a Twilio con <Redirect> («vuelve a preguntar»); cada consulta tiene otros 15 s. Así no hace falta la API
+# REST de Twilio (que exige perfil KYC aprobado).
+_TW_JOBS: dict[str, dict[str, Any]] = {}
+_TW_WAIT_S = 11.0
+_TW_MAX_ROUNDS = 6
+
+
+def _twilio_run(m: dict[str, Any]) -> list:
+    from . import twilio_wa
+    twilio_wa.collect_start()
+    try:
+        _wa_process([m])
+    except Exception:   # nunca dejar a la persona sin respuesta
+        log.exception("Error procesando mensaje de Twilio")
+        twilio_wa.send(m["from"], body="Uy, tuve un problema con ese mensaje 😕. ¿Me lo repites con otras palabras?")
+    return twilio_wa.collect_end()
+
+
+def _twilio_redirect(sid: str, n: int) -> str:
+    base = settings.app_base_url.rstrip("/") if settings.app_base_url else ""
+    return (f'<?xml version="1.0" encoding="UTF-8"?><Response><Redirect method="POST">'
+            f'{base}/webhook/twilio/espera?sid={sid}&amp;n={n}</Redirect></Response>')
+
+
+@app.post("/webhook/twilio")
+async def twilio_receive(request: Request, background: BackgroundTasks):
+    """WhatsApp por Twilio (Sandbox). Configúralo en Twilio: «When a message comes in» = https://TU-URL/webhook/twilio (POST)."""
+    from . import twilio_wa
+    form = {k: str(v) for k, v in (await request.form()).items()}
+    if not _twilio_signed(request, form):
         raise HTTPException(401, "Firma de Twilio inválida")
     m = twilio_wa.extract_message(form)
     items: list = []
     if m and settings.whatsapp_available:
         m["provider"] = "twilio"
+        if m.get("type") == "audio":
+            import threading
+            job = {"done": threading.Event(), "items": [], "t": __import__("time").time()}
+            _TW_JOBS[m["id"]] = job
 
-        def run() -> list:
-            twilio_wa.collect_start()
-            try:
-                _wa_process([m])
-            except Exception:   # nunca dejar a la persona sin respuesta
-                log.exception("Error procesando mensaje de Twilio")
-                twilio_wa.send(m["from"], body="Uy, tuve un problema con ese mensaje 😕. ¿Me lo repites con otras palabras?")
-            return twilio_wa.collect_end()
+            def work():
+                job["items"] = _twilio_run(m)
+                job["done"].set()
+            threading.Thread(target=work, daemon=True).start()
+            # si es rápido, responde de una; si no, «vuelve a preguntar»
+            from starlette.concurrency import run_in_threadpool
+            if await run_in_threadpool(job["done"].wait, _TW_WAIT_S):
+                _TW_JOBS.pop(m["id"], None)
+                return Response(content=twilio_wa.twiml(job["items"]), media_type="application/xml")
+            return Response(content=_twilio_redirect(m["id"], 1), media_type="application/xml")
         from starlette.concurrency import run_in_threadpool
-        items = await run_in_threadpool(run)
+        items = await run_in_threadpool(_twilio_run, m)
     return Response(content=twilio_wa.twiml(items), media_type="application/xml")
+
+
+@app.post("/webhook/twilio/espera")
+async def twilio_wait(request: Request, sid: str, n: int = 1):
+    """Twilio vuelve a preguntar por la respuesta de un audio que todavía se está procesando."""
+    from . import twilio_wa
+    form = {k: str(v) for k, v in (await request.form()).items()}
+    if not _twilio_signed(request, form):
+        raise HTTPException(401, "Firma de Twilio inválida")
+    job = _TW_JOBS.get(sid)
+    if not job:
+        return Response(content=twilio_wa.twiml([]), media_type="application/xml")
+    from starlette.concurrency import run_in_threadpool
+    if await run_in_threadpool(job["done"].wait, _TW_WAIT_S):
+        _TW_JOBS.pop(sid, None)
+        return Response(content=twilio_wa.twiml(job["items"]), media_type="application/xml")
+    if n >= _TW_MAX_ROUNDS:
+        _TW_JOBS.pop(sid, None)
+        return Response(content=twilio_wa.twiml([{"body": "Tu audio está tardando mucho en procesarse 😕. "
+                                                            "¿Me lo mandas otra vez, más corto, o me lo escribes?", "media_url": None}]),
+                        media_type="application/xml")
+    return Response(content=_twilio_redirect(sid, n + 1), media_type="application/xml")
 
 
 class BridgeIn(BaseModel):

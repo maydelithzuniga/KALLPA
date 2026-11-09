@@ -706,9 +706,9 @@ def test_36_gemini_transcribe_rapido_y_con_respaldo(client, monkeypatch):
         return R(200, {"candidates": [{"content": {"parts": [{"text": "pensando...", "thought": True}, {"text": "vendí 2 kilos de papa"}]}}]})
     monkeypatch.setattr(httpx, "post", post)
     assert agent.transcribe_audio(b"ogg") == "vendí 2 kilos de papa"
-    assert seen[0][0] == {"thinkingLevel": "low"} and seen[1][0] == {"thinkingBudget": 0} and seen[1][1] <= 10
+    assert seen[0][0] == {"thinkingLevel": "minimal"} and seen[1][0] == {"thinkingLevel": "low"}
     agent.transcribe_audio(b"ogg")
-    assert seen[-1][0] == {"thinkingBudget": 0}    # recuerda la opción que funcionó
+    assert seen[-1][0] == {"thinkingLevel": "low"}    # recuerda la opción que funcionó
 
     def slow(*a, **k):
         raise httpx.ReadTimeout("The read operation timed out")
@@ -746,3 +746,39 @@ def test_37_informe_formal_pdf_y_por_whatsapp(client, monkeypatch):
         monkeypatch.setattr(settings, k, v)
     r = client.post("/webhook/twilio", data={"MessageSid": "SMinf", "From": f"whatsapp:+{phone}", "Body": "informe", "NumMedia": "0"})
     assert "Tu informe financiero" in r.text and f"<Media>https://kallpa.test/api/businesses/{bid}/report/pdf</Media>" in r.text
+
+
+def test_38_audio_lento_por_twilio_usa_redirect(client, monkeypatch):
+    """Si el audio tarda más que la espera de Twilio, responde <Redirect> y luego entrega la respuesta."""
+    import threading
+    from app import agent, main, twilio_wa
+    from app.config import settings
+    from app.db import SessionLocal
+    from app import models as M
+    for k, v in {"whatsapp_enabled": True, "whatsapp_provider": "twilio", "twilio_account_sid": "AC", "twilio_auth_token": "t",
+                 "twilio_validate": False, "app_base_url": "https://kallpa.test", "agent_enabled": True, "gemini_api_key": "k"}.items():
+        monkeypatch.setattr(settings, k, v)
+    monkeypatch.setattr(main, "_TW_WAIT_S", 0.2)
+    gate = threading.Event()
+
+    def slow_transcribe(audio, mime_type="audio/ogg", timeout=45.0):
+        gate.wait(5)
+        return "vendí un polo a 20 soles en efectivo"
+    monkeypatch.setattr(agent, "transcribe_audio", slow_transcribe)
+    monkeypatch.setattr(twilio_wa, "download_media", lambda url: b"ogg")
+    with SessionLocal() as db:
+        b = M.Business(name="Tienda", phone="51999000444", setup_state="listo", kind="reventa")
+        db.add(b)
+        db.flush()
+        db.add(M.Product(business_id=b.id, name="Polo", aliases=["polo", "polos"], price_cents=2000, cost_cents=1200, initial_stock=10))
+        db.commit()
+    form = {"MessageSid": "SMaud", "From": "whatsapp:+51999000444", "Body": "", "NumMedia": "1",
+            "MediaUrl0": "https://api.twilio.com/m/1", "MediaContentType0": "audio/ogg"}
+    r = client.post("/webhook/twilio", data=form)
+    assert "<Redirect" in r.text and "/webhook/twilio/espera?sid=SMaud&amp;n=1" in r.text
+    r = client.post("/webhook/twilio/espera?sid=SMaud&n=1", data=form)
+    assert "<Redirect" in r.text and "n=2" in r.text          # todavía procesando: vuelve a preguntar
+    gate.set()
+    monkeypatch.setattr(main, "_TW_WAIT_S", 3)
+    r = client.post("/webhook/twilio/espera?sid=SMaud&n=2", data=form)
+    assert "<Message><Body>" in r.text and "S/ 20" in r.text
