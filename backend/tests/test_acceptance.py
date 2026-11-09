@@ -553,3 +553,15 @@ def test_29_whatsapp_por_puente_gratis(client, monkeypatch):
     with SessionLocal() as db:
         notify._deliver(db, db.get(M.Business, bid), "k-test", "noche", "Tu resumen de hoy", [])
     assert client.get("/webhook/bridge/outbox", headers=h).json()["outbox"][0]["text"] == "Tu resumen de hoy"
+
+
+def test_30_explicaciones_con_sus_numeros_y_gastos_fijos(chat):
+    """«¿Qué es…?» responde con los números del negocio; los gastos fijos se dicen por chat."""
+    chat("vendí 2 polos en efectivo")
+    r = chat("cuánto tengo que vender")["reply"]
+    assert "gastos fijos" in r and "S/ 0" not in r   # sin gastos fijos: los pide, no dice «vende S/ 0»
+    r = chat("pago 250 de alquiler del puesto al mes")["reply"]
+    assert r.startswith("✓ Anoté tu gasto fijo: alquiler del puesto S/ 250 al mes") and "al día" in r
+    assert "S/ 250 al mes" in chat("qué es el punto de equilibrio")["reply"]
+    assert "semana" in chat("qué es la rotación")["reply"]   # con pocos días no inventa «238 días»
+    assert "S/ 40" in chat("qué es la ganancia")["reply"] or "ganaste" in chat("qué es la ganancia")["reply"]

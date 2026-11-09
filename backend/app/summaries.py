@@ -5,6 +5,7 @@ import re
 
 from datetime import date, timedelta
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from . import ledger, metrics
@@ -108,24 +109,36 @@ def explain(db: Session, b: M.Business, topic: str) -> str:
         ms = [m for m in metrics.product_margins(db, b, today - timedelta(days=30), today + timedelta(days=1)) if m["margin_per_unit_cents"] is not None]
         if ms:
             m = ms[0]
-            return (f"Es cuánto te queda de cada venta después de pagar lo que te costó. Por ejemplo, tu {m['name'].lower()} "
+            return (f"Es cuánto te queda de cada venta después de pagar lo que te costó. Por ejemplo, {m['name'].lower()}: "
                     f"lo vendes en promedio a {soles(m['avg_price_cents'])} y te deja {soles(m['margin_per_unit_cents'])} por unidad "
                     f"({m['margin_pct']}%).")
         return "Es cuánto te queda de cada venta después de pagar lo que te costó. Dime el costo de tus productos para calcularlo."
     if topic == "equilibrio":
         be = metrics.break_even(db, b)
+        intro = "Es lo mínimo que tienes que vender para no perder: lo que cubre tus gastos fijos del mes. "
+        if not be.get("fixed_cents"):
+            return (intro + "Aún no me dijiste tus gastos fijos (alquiler del puesto, luz, celular, ayudante). "
+                    "Dímelos así: «pago 250 de alquiler al mes» y te digo cuánto tienes que vender cada día.")
         if be.get("available"):
-            return (f"Es lo mínimo que tienes que vender para no perder. Tus gastos fijos son {soles(be['fixed_cents'])} al mes "
-                    f"y de cada sol que vendes te quedan {be['contribution_margin_pct']} céntimos para cubrirlos. "
-                    f"Necesitas vender {soles(be['break_even_monthly_cents'])} al mes, unos {soles(be['break_even_daily_cents'])} al día.")
-        return "Es lo mínimo que tienes que vender para no perder. " + be.get("reason", "")
+            return (intro + f"Tus gastos fijos son {soles(be['fixed_cents'])} al mes y de cada sol que vendes te quedan "
+                    f"{round(be['contribution_margin_pct'])} céntimos para cubrirlos. Necesitas vender {soles(be['break_even_monthly_cents'])} "
+                    f"al mes, unos {soles(be['break_even_daily_cents'])} al día.")
+        return intro + be.get("reason", "")
     if topic == "rotacion":
         r = metrics.rotation(db, b)
-        parts = ["Es qué tan rápido se mueve tu plata y tu mercadería."]
-        if r["inventory_days"]:
-            parts.append(f"Lo que tienes en mercadería lo vendes en unos {r['inventory_days']} días.")
-        if r["cash_days"]:
-            parts.append(f"Con tu caja de hoy cubres unos {r['cash_days']} días de gastos.")
+        first = db.scalar(select(func.min(M.Movement.occurred_at)).where(M.Movement.business_id == b.id))
+        days = (today - first.date()).days + 1 if first else 0
+        parts = ["Es qué tan rápido se convierte tu mercadería en plata."]
+        if days < 7:
+            inv = r.get("inventory_value_cents") or 0
+            parts.append((f"Hoy tienes unos {soles(inv)} en mercadería (a lo que te costó). " if inv else "")
+                         + "Con una semana de ventas registradas te digo en cuántos días la vendes y qué producto se mueve más lento.")
+        else:
+            if r["inventory_days"]:
+                parts.append(f"Lo que tienes en mercadería lo vendes en unos {min(r['inventory_days'], 365)} días"
+                             + (": se mueve rápido 👍." if r["inventory_days"] <= 15 else ". Si pasa de un mes, compra menos de lo que se vende lento."))
+            if r["cash_days"]:
+                parts.append(f"Con tu caja de hoy cubres unos {min(r['cash_days'], 365)} días de gastos.")
         return " ".join(parts)
     if topic == "caja":
         return "Es la plata que tienes hoy para usar, sumando efectivo y Yape. " + cash_line(db, b)

@@ -45,6 +45,10 @@ Escribe cada línea **como un mensaje aparte** en el chat «Twilio Sandbox» y e
 | `cuánto tengo` | En caja tienes S/ 175 (S/ 124 efectivo, S/ 51 Yape) |
 | `cuánto tomate me queda` | Tomate: 17.5 kilos |
 | `qué es el flujo de caja` | Explicación con TUS números de la semana |
+| `qué es la ganancia` / `qué es el margen` | Con tus ventas y costos reales |
+| `cuánto tengo que vender` | Te pide tus gastos fijos si aún no los sabe |
+| `pago 250 de alquiler al mes` | ✓ Anoté tu gasto fijo… Necesitas vender S/ … al día |
+| `qué es la rotación` | Cuánto tienes en mercadería y (con una semana de datos) en cuántos días la vendes |
 | `quiero ahorrar 300 soles para fin de mes` | Meta guardada |
 | `ayuda` | Ejemplos con tus productos |
 

@@ -282,6 +282,17 @@ class Engine:
             return self.start_correction(p)
         if i == "anular":
             return self.undo_last()
+        if i == "gasto_fijo":
+            name, amt = p.fields["name"], p.fields["amount_cents"]
+            fx = self.db.scalar(select(M.FixedExpense).where(M.FixedExpense.business_id == self.b.id,
+                                                              M.FixedExpense.name == name))
+            if fx:
+                fx.amount_cents = amt
+            else:
+                self.db.add(M.FixedExpense(business_id=self.b.id, name=name, amount_cents=amt, due_day=1))
+            self.db.commit()
+            return self.resp(f"✓ Anoté tu gasto fijo: {name.lower()} {soles(amt)} al mes. "
+                             + summaries.explain(self.db, self.b, "equilibrio").replace("Es lo mínimo que tienes que vender para no perder: lo que cubre tus gastos fijos del mes. ", ""))
         if i == "consentir_informe":
             return self.consent(True)
         return self.answer_question(i, raw)
