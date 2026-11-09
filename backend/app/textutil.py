@@ -10,6 +10,9 @@ def pluralize(word: str) -> str:
         elif w[-1] not in "lnrdjy":
             out.append(w + "s")
         else:
+            # agudas con tilde pierden la tilde al pluralizar: limón → limones, melón → melones
+            if len(w) > 2 and w[-2] in "áéíóú":
+                w = w[:-2] + "aeiou"["áéíóú".index(w[-2])] + w[-1]
             out.append(w + "es")
     return " ".join(out)
 

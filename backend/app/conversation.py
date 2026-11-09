@@ -284,7 +284,7 @@ class Engine:
             return self.undo_last()
         if i == "consentir_informe":
             return self.consent(True)
-        return self.answer_question(i)
+        return self.answer_question(i, raw)
 
     def _when(self, fields: dict[str, Any], occurred_at: datetime | None) -> str:
         if fields.get("day"):
@@ -294,7 +294,7 @@ class Engine:
         return (occurred_at or now_lima()).isoformat()
 
     # ------------------------------------------------------------ preguntas
-    def answer_question(self, intent: str) -> dict[str, Any]:
+    def answer_question(self, intent: str, text: str = "") -> dict[str, Any]:
         db, b = self.db, self.b
         if intent == "resumen_dia":
             return self.resp(summaries.daily(db, b))
@@ -323,13 +323,13 @@ class Engine:
         if intent == "metas":
             return self.resp(summaries.goals_text(db, b))
         if intent == "inventario":
-            return self.resp(summaries.inventory_text(db, b))
+            return self.resp(summaries.inventory_text(db, b, text))
         if intent == "informe":
             return self.resp("Tu informe para el banco está en la app, en «Reporte». Lo revisas y decides si lo descargas y lo presentas.")
         if intent == "ayuda":
             name = f" {self.b.owner_name}" if self.b.owner_name else ""
-            return self.resp(f"¡Hola{name}! " + summaries.HELP)
-        return self.resp("No te entendí bien. " + summaries.HELP, quick=["Resumen de hoy", "¿Cuánto tengo?"])
+            return self.resp(f"¡Hola{name}! " + summaries.help_text(db, b))
+        return self.resp("No te entendí bien. " + summaries.help_text(db, b), quick=["Resumen de hoy", "¿Cuánto tengo?"])
 
     # ------------------------------------------------------------ borradores
     def continue_draft(self, d: M.Draft, p: nlu.Parsed, raw: str, occurred_at) -> dict[str, Any] | None:
@@ -355,7 +355,7 @@ class Engine:
             return None
         if p.intent.startswith(("resumen", "explica", "caja", "fiados", "metas", "inventario", "consejos", "reponer", "ayuda")) \
                 and p.intent != "valor":
-            r = self.answer_question(p.intent)
+            r = self.answer_question(p.intent, p.text)
             r["reply"] += " (Sigo esperando tu respuesta sobre lo anterior.)"
             r["draft"] = self.draft_view(d)
             return r
@@ -1486,7 +1486,9 @@ def short_line(db: Session, mv: M.Movement, with_method: bool = True) -> str:
     k = mv.kind
     name = mv.product.name.lower() if mv.product else None
     if k == M.SALE:
-        if name and mv.quantity and not (mv.product and not mv.product.track_stock and mv.measure):
+        if name and mv.quantity and not mv.measure and units.base_unit(mv.product) not in ("unidad", "plato", "docena"):
+            what = f"{name} ({units.fmt_qty(mv.quantity)} {units.unit_name(units.base_unit(mv.product), mv.quantity)})"
+        elif name and mv.quantity and not (mv.product and not mv.product.track_stock and mv.measure):
             what = qty_name(mv.quantity, name) if mv.product.track_stock else f"{mv.quantity} {name}"
         elif name and mv.measure:
             what = f"{name} ({measure_txt(mv.measure, mv.measure_unit)})"

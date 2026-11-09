@@ -171,7 +171,7 @@ class Onboarding:
                 return self.reply(prefix + f"El {p['name'].lower()} lo vendes de a sol. ¿De cuánto son tus montoncitos? Por ejemplo «de 1 y de 2 soles».", ["De 1 sol"])
             n = len(d["products"])
             pre = f"({d['i'] + 1} de {n}) " if n > 1 else ""
-            return self.reply(prefix + pre + f"¿A cuánto das el {self.unit_txt(p)} de {p['name'].lower()}? ¿Y a ti cuánto te cuesta? "
+            return self.reply(prefix + pre + f"¿A cuánto das {'la' if self.unit_txt(p) in ('unidad', 'docena') else 'el'} {self.unit_txt(p)} de {p['name'].lower()}? ¿Y a ti cuánto te cuesta? "
                                              "Por ejemplo «a 4, me cuesta 2.50».", ["No sé"])
         if stage == "compra":
             pend = d.get("pending")
@@ -208,7 +208,7 @@ class Onboarding:
             if p.get("base") == "soles":
                 parts.append("lo vendes de a sol")
             elif price:
-                parts.append(f"lo vendes a {soles(price)} el {u}")
+                parts.append(f"lo vendes a {soles(price)} {'la' if u in ('unidad', 'docena') else 'el'} {u}")
             if p.get("costo_cents"):
                 parts.append(f"te cuesta {soles(p['costo_cents'])}")
             c = p.get("compra_por") or {}

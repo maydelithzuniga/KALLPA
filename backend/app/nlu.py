@@ -94,6 +94,7 @@ def normalize(text: str) -> str:
     t = re.sub(r"\b(\d+) docenas?\b", lambda m: f"{int(m.group(1)) * 12} unidades", t)
     t = re.sub(r"\buna? docena\b|\bdocena\b", "12 unidades", t)
     t = re.sub(r"\b(\d+) (?:soles |sol )?con (\d{2})(?: centimos| centavos)?\b", r"\1.\2 soles", t)
+    t = re.sub(r"\b(\d{1,2}) (?:centimos|centavos|cntms)\b", lambda m: f"0.{int(m.group(1)):02d} soles", t)
     t = re.sub(r"\b(\d+) lucas?\b", r"\1 soles", t)
     # medidas de mercado: medio kilo, un cuarto, kilo y medio, media jaba
     t = re.sub(r"\bkg\b|\bkgs\b", "kilos", t)
@@ -354,8 +355,11 @@ def find_person(t: str) -> str | None:
     pats = [
         r"\b(?:a|de|para|con) (?:la |el |mi )?(?:senora|senor|sra|sr|don|dona|vecina|vecino|tia|tio|amiga|amigo|casera|casero|cliente) ([a-zñ]+)",
         r"\b(?:la |el )?(?:senora|senor|sra|sr|don|dona|vecina|vecino|tia|tio|casera|casero) ([a-zñ]+)",
-        r"\bfie(?:\s\S+){0,3}? a (?:la |el )?([a-zñ]+)",
-        r"\b(?:a|de) ([a-zñ]{3,})(?= me debe| le fie| fiado| le quedo| quedo debiendo)",
+        r"\bfie(?:\s\S+){0,5}? a (?:la |el )?([a-zñ]+)",
+        r"^([a-zñ]{3,}) (?:se llevo|se lleva|se llevo|saco|pidio|me saco|me pidio)\b",
+        r"\bfiado a (?:la |el )?(?:senora |senor |don |dona )?([a-zñ]{3,})",
+        r"\ba ([a-zñ]{3,})(?= me debe| le fie| fiado| le quedo| quedo debiendo)",
+        r"\bde ([a-zñ]{3,})(?= me debe| quedo debiendo| le quedo)",
         r"^([a-zñ]{3,}) me (?:pago|pagó|debe|devolvio|yapeo|cancelo)",
         r"\b(?:cobre|cobré) (?:a |el fiado de |lo de |la deuda de )(?:la |el )?([a-zñ]{3,})",
         r"\bfiado de (?:la |el )?(?:senora |senor |don |dona )?([a-zñ]{3,})",
@@ -397,6 +401,7 @@ QUESTION_PATTERNS: list[tuple[str, str]] = [
     (r"\b(fiados|quien me debe|cuanto me deben|me deben)\b\??$", "fiados"),
     (r"\b(mis metas|como va mi meta|mi meta|cuanto me falta)\b", "metas"),
     (r"\b(stock|inventario|mercaderia que tengo|que me queda|cuanto me queda)\b\??$", "inventario"),
+    (r"^(?:y )?(?:cuant[oa]s?|que tanto) (?:de )?(?:[a-zñ]+ ){0,3}(?:me queda|me quedan|queda|quedan|tengo)\b", "inventario"),
     (r"\b(informe|reporte)\b", "informe"),
     (r"\b(ayuda|que puedo decir|como funciona|que haces|hola|buenas|buenos dias|buenas tardes|buenas noches)\b", "ayuda"),
 ]
@@ -886,9 +891,11 @@ def _goal_fields(t: str, today: date) -> dict[str, Any]:
 
 def _balances(t: str) -> dict[str, int]:
     out: dict[str, int] = {}
-    for m in re.finditer(r"(?:s/ ?)?(\d+(?:\.\d{1,2})?)(?: ?soles)?\s+(?:en|de|por)?\s*(?:el |mi )?(efectivo|yape|plin|caja)", t):
+    used: list[tuple[int, int]] = []
+    for m in re.finditer(r"(?:s/ ?)?(\d+(?:\.\d{1,2})?)(?: ?soles)?\s+(?:en|de|por)?\s*(?:el |la |mi )?(efectivo|yape|plin|caja|monedero|bolsillo|billetera|mano|sencillo|cajon)", t):
         pocket = "yape" if m.group(2) in ("yape", "plin") else "efectivo"
         out[pocket] = int(round(float(m.group(1)) * 100))
+        used.append(m.span(1))
     for m in re.finditer(r"\b(efectivo|yape|caja)\s+(?:tengo\s+)?(?:s/ ?)?(\d+(?:\.\d{1,2})?)", t):
         pocket = "yape" if m.group(1) == "yape" else "efectivo"
         out.setdefault(pocket, int(round(float(m.group(2)) * 100)))
@@ -896,6 +903,11 @@ def _balances(t: str) -> dict[str, int]:
         amts = find_amounts(t) or _bare_amounts(t)
         if amts:
             out["efectivo"] = amts[0].cents
+    elif "efectivo" not in out:   # «tengo 80 soles y 50 en yape»: el monto suelto es el efectivo
+        for m in re.finditer(r"\b(\d+(?:\.\d{1,2})?)\b", t):
+            if not any(a <= m.start() < b for a, b in used):
+                out["efectivo"] = int(round(float(m.group(1)) * 100))
+                break
     return out
 
 

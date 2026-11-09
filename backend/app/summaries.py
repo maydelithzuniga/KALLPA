@@ -1,6 +1,8 @@
 """Textos cortos para el chat: como una amiga que sabe de números. Sin IA externa."""
 from __future__ import annotations
 
+import re
+
 from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
@@ -149,17 +151,24 @@ def receivables_text(db: Session, b: M.Business) -> str:
     return f"Te deben {soles(total)}: {top}."
 
 
-def inventory_text(db: Session, b: M.Business) -> str:
+def inventory_text(db: Session, b: M.Business, text: str = "") -> str:
+    from . import nlu, units
     inv = [i for i in metrics.inventory(db, b) if i["track_stock"]]
     if not inv:
-        return "No llevo stock de tus productos. Dime «tengo 10 polos» para empezar a contarlos."
+        return "No llevo stock de tus productos. Dime por ejemplo «tengo 10 kilos de papa» para empezar a contarlos."
+    t = nlu.normalize(text or "")
+    asked = [i for i in inv if any(re.search(rf"\b{re.escape(nlu.normalize(w))}", t) for w in [i["name"], *(i["aliases"] or [])] if w)]
     parts = []
-    for i in inv[:6]:
-        if i["expected_stock"] is None:
+    for i in (asked or inv)[:8]:
+        exp = i["expected_stock"]
+        if exp is None:
             parts.append(f"{i['name']}: sin stock inicial")
         else:
-            parts.append(f"{i['name']}: {i['expected_stock']}")
-    return "Según tus registros tienes " + "; ".join(parts) + "."
+            line = f"{i['name']}: {units.fmt_qty(exp)} {units.unit_name(i['unit'], exp)}"
+            if i.get("days_left") is not None and i["days_left"] <= 3:
+                line += f" (te alcanza para unos {i['days_left']} días)"
+            parts.append(line)
+    return ("Según tus registros te queda: " if asked else "Según tus registros tienes: ") + "; ".join(parts) + "."
 
 
 def goals_text(db: Session, b: M.Business) -> str:
@@ -167,6 +176,21 @@ def goals_text(db: Session, b: M.Business) -> str:
     if not gs:
         return "Aún no tienes metas. Dime por ejemplo «quiero juntar 1500 para una congeladora en diciembre»."
     return " ".join(g["message"] for g in gs[:2])
+
+
+def help_text(db: Session, b: M.Business) -> str:
+    """Ayuda con ejemplos de SUS productos (no siempre polos)."""
+    prods = [p for p in db.query(M.Product).filter(M.Product.business_id == b.id).limit(3)]
+    if prods:
+        from . import units
+        a = prods[0].name.lower()
+        u = units.base_unit(prods[0])
+        venta = f"vendí 2 kilos de {a} en efectivo" if u == "kg" else f"vendí 3 {a} por Yape"
+        b2 = prods[1].name.lower() if len(prods) > 1 else a
+        return (f"Puedes decirme cosas como: «{venta}», «gasté 5 en bolsas», «se malogró un kilo de {b2}», "
+                f"«Rosa se llevó 2 kilos de {b2} fiado», «Rosa me pagó 5», «¿cuánto {a} me queda?», "
+                "«resumen», «cuánto tengo», «a quién tengo que cobrar», «cerrar mi día» o «deshacer».")
+    return HELP
 
 
 HELP = ("Puedes decirme cosas como: «vendí 3 polos a 25 por Yape», «compré una docena de polos por 144», "
