@@ -122,10 +122,14 @@ class Engine:
                 re.match(r"^(si )?(envialo|mandalo|enviale|mandale)\b", nlu.normalize(text)) and self.pending_consent_month()):
             return self.consent(True, draft if draft and draft.action == "consentimiento" else None)
         if draft and draft.action == "consentimiento":
-            if parsed.intent == "confirmar":
+            if parsed.intent == "confirmar" or re.match(r"^(si|sí)\b", nlu.normalize(text)):
                 return self.consent(True, draft)
             if parsed.intent == "cancelar" or nlu.normalize(text).startswith("no por ahora"):
                 return self.consent(False, draft)
+            if re.search(r"\b(que se envia|que envias|que mandan|que bancos|para que|que va|que incluye|que informe|"
+                         r"que datos|es seguro|quien lo ve)\b", nlu.normalize(text)):
+                from . import bank_consent
+                return self.resp(bank_consent.what_is_sent(), draft, ["Sí, envíalo", "No por ahora"])
             draft.status = "cancelado"   # siguió con otra cosa: no insistimos este mes
             self.db.flush()
             draft = None
@@ -1529,47 +1533,44 @@ class Engine:
 
     # ------------------------------------------------------------ consentimiento mensual BCP
     def pending_consent_month(self) -> date | None:
-        prev = add_months(month_start(self.today), -1)
-        key = prev.strftime("%Y-%m")
-        if self.db.scalar(select(M.ReportConsent).where(M.ReportConsent.business_id == self.b.id, M.ReportConsent.month == key)):
-            return None
-        has = self.db.scalar(select(M.Movement.id).where(M.Movement.business_id == self.b.id,
-                                                         M.Movement.occurred_at >= datetime(prev.year, prev.month, 1),
-                                                         M.Movement.occurred_at < datetime(self.today.year, self.today.month, 1)))
-        return prev if has else None
+        from . import bank_consent
+        return bank_consent.pending_month(self.db, self.b, self.today)
 
     def with_consent_prompt(self, r: dict[str, Any]) -> dict[str, Any]:
+        """Cada fin de mes (y luego una vez al día hasta que responda): ¿envío tu informe a los bancos aliados?"""
         if r.get("draft") or r.get("share"):
             return r
+        from . import bank_consent
         prev = self.pending_consent_month()
         if not prev:
             return r
-        already = self.db.scalar(select(M.Draft).where(M.Draft.business_id == self.b.id, M.Draft.action == "consentimiento",
-                                                       M.Draft.conversation == self.conv))
-        if already and already.data.get("month") == prev.strftime("%Y-%m"):
+        if bank_consent.asked_today(self.db, self.b, self.conv, prev, self.today):
             return r
-        d = self.new_draft("consentimiento", {"month": prev.strftime("%Y-%m")})
+        d = self.new_draft("consentimiento", {"month": prev.strftime("%Y-%m"), "asked_on": self.today.isoformat()})
         d.summary_read = True
         self.db.commit()
-        r["reply"] += f" Por cierto: ya está tu informe de {month_label(prev)}. ¿Quieres que se le envíe al BCP?"
+        r["reply"] += "\n\n" + bank_consent.question_text(prev)
         r["draft"] = self.draft_view(d)
-        r["quick_replies"] = ["Sí, envíalo", "No por ahora"]
+        r["quick_replies"] = bank_consent.QUICK
         return r
 
     def consent(self, yes: bool, d: M.Draft | None = None) -> dict[str, Any]:
-        prev = add_months(month_start(self.today), -1)
-        key = d.data["month"] if d else prev.strftime("%Y-%m")
+        from . import bank_consent
+        from .config import settings
+        m = date.fromisoformat(d.data["month"] + "-01") if d else (self.pending_consent_month() or bank_consent.report_month(self.today))
+        key = m.strftime("%Y-%m")
         existing = self.db.scalar(select(M.ReportConsent).where(M.ReportConsent.business_id == self.b.id, M.ReportConsent.month == key))
         if not existing:
             self.db.add(M.ReportConsent(business_id=self.b.id, month=key, decision="si" if yes else "no"))
         if d:
             d.status = "confirmado"
         self.db.commit()
-        self.db.commit()
         if yes:
-            return self.resp("Listo, autorizaste el envío de tu informe al BCP. En esta demo el envío es simulado: "
-                             "puedes revisarlo y descargarlo en «Reporte».")
-        return self.resp("Ok, no lo envío. Lo tienes en «Reporte» cuando lo necesites.")
+            url = f"{settings.app_base_url}/api/businesses/{self.b.id}/report/pdf" if settings.app_base_url else None
+            return self.resp(bank_consent.sent_text(self.db, self.b, m)
+                             + ("" if url else " Lo descargas en la app, en «Informe BCP»."), media_url=url)
+        return self.resp(f"Ok, este mes no lo enviamos. Lo tienes en la app («Informe BCP») cuando lo necesites; "
+                         f"el próximo fin de mes te vuelvo a preguntar.")
 
     # ------------------------------------------------------------ onboarding por chat
     def onboarding(self, text: str) -> dict[str, Any]:

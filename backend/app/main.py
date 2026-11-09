@@ -692,7 +692,9 @@ def consent_status(business_id: int, db: Session = Depends(get_db)):
     b = biz(db, business_id)
     eng = conversation.Engine(db, b, f"web:{b.id}")
     prev = eng.pending_consent_month()
+    from . import bank_consent
     return {"pending_month": prev.strftime("%Y-%m") if prev else None, "pending_label": month_label(prev) if prev else None,
+            "banks": bank_consent.banks(),
             "history": [{"month": c.month, "decision": c.decision, "decided_at": c.decided_at.isoformat()}
                         for c in db.scalars(select(M.ReportConsent).where(M.ReportConsent.business_id == b.id)
                                             .order_by(M.ReportConsent.month.desc())).all()]}
@@ -727,7 +729,7 @@ def list_notifications(business_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/businesses/{business_id}/notifications/run")
-def run_notifications(business_id: int, slot: Literal["manana", "noche", "semana", "mes"] | None = None, db: Session = Depends(get_db)):
+def run_notifications(business_id: int, slot: Literal["manana", "noche", "semana", "mes", "fin_mes"] | None = None, db: Session = Depends(get_db)):
     """Genera los mensajes que tocan ahora (o fuerza uno para probar: manana, noche, semana, mes)."""
     created = notify.run(db, biz(db, business_id), force=slot)
     return [{"kind": n.kind, "text": n.text, "sent_whatsapp": n.sent_whatsapp} for n in created]

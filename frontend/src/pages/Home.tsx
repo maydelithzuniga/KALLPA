@@ -42,7 +42,7 @@ export default function Home({ ctx }: { ctx: Ctx }) {
 
   const alerts: Alert[] = []
   if (d.consent.pending_month) alerts.push({
-    ico: '🏦', bg: 'var(--lav-soft)', text: `Tu informe de ${d.consent.pending_label} está listo`, sub: '¿Quieres que se le envíe al BCP?',
+    ico: '🏦', bg: 'var(--lav-soft)', text: `Tu informe de ${d.consent.pending_label} está listo`, sub: `¿Lo enviamos a los bancos aliados (${d.consent.banks || 'BCP'}) para que conozcan tu negocio y te ofrezcan productos financieros?`,
     actions: <div className="row" style={{ marginTop: 8 }}><button className="btn sm" onClick={() => consent('si')}>Sí, envíalo</button><button className="btn sm ghost" onClick={() => consent('no')}>No por ahora</button></div>,
   })
   for (const a of d.alerts_today ?? []) alerts.push({

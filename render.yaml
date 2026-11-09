@@ -45,6 +45,8 @@ services:
         sync: false
       - key: APP_BASE_URL
         sync: false
+      - key: PARTNER_BANKS          # bancos aliados a los que se envía el informe (separados por coma)
+        value: BCP
       - key: AGENT_ENABLED
         value: "false"
       - key: GEMINI_API_KEY

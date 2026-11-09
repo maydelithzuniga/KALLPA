@@ -136,6 +136,20 @@ Si preguntan algo que no está, Kallpa consulta a Gemini con búsqueda de Google
 |---|---|
 | `informe` | 📄 Tu informe financiero para el banco (solo lo verificado por Yape). Todavía no tienes movimientos por Yape verificados: el informe solo usa lo verificado. Cobra por Yape y verifica tus Yape en la app (Más → Historial) para que se llene. Lo descargas en la app, en «Informe BCP». |
 
+## Acto 9b · Fin de mes: ¿enviamos tu informe a los bancos aliados? (sí o sí)
+
+Cada fin de mes Kallpa pregunta (al cerrar el día, en el aviso de la noche y, si no responde, una vez al día hasta que
+decida). Para mostrarlo en la demo sin esperar al último día: en la app, **Más → Ajustes → Mensajes automáticos →
+«Fin de mes: informe a los bancos»**, o usa un negocio de ejemplo (ya tiene el mes anterior pendiente).
+
+| Tú escribes | Kallpa responde |
+|---|---|
+| `resumen` | (resumen) … 📊 Tu informe de finanzas de octubre está listo (solo lo verificado por Yape). ¿Quieres que lo enviemos a nuestros bancos aliados (BCP) para que conozcan tu negocio y puedan ofrecerte productos financieros…? Tú decides cada mes. [Sí, envíalo · No por ahora · ¿Qué se envía?] |
+| `¿qué se envía?` | Se envía tu informe financiero en PDF: ingresos y egresos por Yape verificados, flujo neto, cuota posible, estabilidad y clientes. No se envía tu efectivo ni tus conversaciones… |
+| `sí` | ✓ Listo. Enviamos tu informe de octubre a BCP (simulado). Código KAL-… Te dejo tu copia (PDF adjunto). Si un banco tiene una oferta para ti, te aviso por aquí. |
+
+Los bancos aliados se configuran en Render con `PARTNER_BANKS` (por ejemplo `BCP, Mibanco`).
+
 ## Acto 10 · Cierre del día contando la plata
 
 | Tú escribes | Kallpa responde |

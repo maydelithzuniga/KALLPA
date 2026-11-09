@@ -21,7 +21,7 @@ export default function Report({ ctx }: { ctx: Ctx }) {
   const bid = ctx.business.id
   const [period, setPeriod] = useState('3m')
   const [r, setR] = useState<R | null>(null)
-  const [consent, setConsent] = useState<{ pending_month: string | null; pending_label: string | null; history: { month: string; decision: string }[] } | null>(null)
+  const [consent, setConsent] = useState<{ pending_month: string | null; pending_label: string | null; banks?: string; history: { month: string; decision: string }[] } | null>(null)
   const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
@@ -33,7 +33,7 @@ export default function Report({ ctx }: { ctx: Ctx }) {
 
   async function decide(month: string, decision: 'si' | 'no') {
     setConsent(await send(`/api/businesses/${bid}/report/consent`, { month, decision }))
-    ctx.toast(decision === 'si' ? 'Autorizado. En esta demo el envío al BCP es simulado.' : 'No se enviará este mes.')
+    ctx.toast(decision === 'si' ? `Enviado a ${consent?.banks || 'BCP'} (en esta demo es simulado).` : 'No se enviará este mes. El próximo mes te vuelvo a preguntar.')
   }
 
   return (
@@ -48,7 +48,8 @@ export default function Report({ ctx }: { ctx: Ctx }) {
         </div>
         {consent?.pending_month && (
           <div className="qcard">
-            <div className="qtitle">¿Enviamos tu informe de {consent.pending_label} al BCP?</div>
+            <div className="qtitle">¿Enviamos tu informe de {consent.pending_label} a los bancos aliados ({consent.banks || 'BCP'})?</div>
+            <p className="say" style={{ marginTop: 6 }}>Así conocen tu negocio y pueden ofrecerte créditos, ahorro o seguros. Solo va lo verificado por Yape; tú decides cada mes.</p>
             <div className="row" style={{ marginTop: 12 }}>
               <button className="btn sm" onClick={() => decide(consent.pending_month!, 'si')}>Sí, envíalo</button>
               <button className="btn sm ghost" onClick={() => decide(consent.pending_month!, 'no')}>No por ahora</button>

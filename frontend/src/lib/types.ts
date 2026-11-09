@@ -70,7 +70,7 @@ export type Dashboard = {
   rotation: { cash_days: number | null; cash_turnover: number | null; inventory_value_cents: number; inventory_turnover_30d: number | null
     inventory_days: number | null; receivable_days: number | null }
   goals: Goal[]; alerts: { product: string; pct: number }[]; advice: string[]; inventory_flags: InventoryItem[]
-  daily_text: string; consent: { pending_month: string | null; pending_label: string | null }
+  daily_text: string; consent: { pending_month: string | null; pending_label: string | null; banks?: string }
   alerts_today: { key: string; icon: string; text: string; whatsapp_url?: string; message?: string }[]
   week_text: string
   messages: { id: number; kind: string; title: string; text: string; created_at: string; sent_whatsapp: boolean }[]

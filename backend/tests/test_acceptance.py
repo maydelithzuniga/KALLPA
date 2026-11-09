@@ -390,7 +390,7 @@ def test_12_lista_de_cobros_para_la_vendedora(client, shop, chat):
     semana = client.post(f"/api/businesses/{bid}/notifications/run?slot=semana").json()
     assert semana[0]["text"].startswith("Tu semana:") and "Por cobrar (S/ 10)" in semana[0]["text"]
     mes = client.post(f"/api/businesses/{bid}/notifications/run?slot=mes").json()
-    assert "Tu informe para el BCP está listo" in mes[0]["text"] and "Por cobrar (S/ 10)" in mes[0]["text"]
+    assert "Tu informe de finanzas de" in mes[0]["text"] and "Por cobrar (S/ 10)" in mes[0]["text"]
     hist = client.get(f"/api/businesses/{bid}/chat/history").json()
     assert sum(1 for h in hist if h["channel"] == "aviso") == 3
 
@@ -951,3 +951,43 @@ def test_42_preguntas_teoricas_glosario_ia_con_busqueda_y_wikipedia(client, shop
     monkeypatch.setattr(httpx, "get", get)
     r = chat("¿qué es el micromecenazgo?")["reply"]
     assert r.startswith("📘 Micromecenazgo: El micromecenazgo es la cooperación colectiva. Se usa para financiar proyectos.")
+
+
+def test_43_fin_de_mes_pregunta_si_o_si_por_el_informe_a_los_bancos(client, shop, chat, monkeypatch):
+    """Último día del mes: pregunta (sí o sí), explica qué se envía, re-pregunta 1 vez al día y nunca envía sin «sí»."""
+    from datetime import date
+    from app import conversation, notify
+    from app.config import settings
+    monkeypatch.setenv("PARTNER_BANKS", "BCP, Mibanco")
+    monkeypatch.setattr(settings, "app_base_url", "https://kallpa.test")
+    hoy = conversation.today_lima()
+    import calendar
+    last = date(hoy.year, hoy.month, calendar.monthrange(hoy.year, hoy.month)[1])
+    monkeypatch.setattr(conversation, "today_lima", lambda: last)
+    r = chat("vendí 2 polos en efectivo")
+    assert "¿Quieres que lo enviemos a nuestros bancos aliados (BCP y Mibanco)" in r["reply"]
+    assert r["quick_replies"] == ["Sí, envíalo", "No por ahora", "¿Qué se envía?"]
+    r = chat("¿qué se envía?")
+    assert "No se envía tu efectivo ni tus conversaciones" in r["reply"]
+    # lo ignora (registra otra venta): ese día no se repite la pregunta
+    assert "bancos aliados" not in chat("vendí un polo en efectivo")["reply"]
+    # al día siguiente (1 del mes) vuelve a preguntar una vez, por el mes que terminó
+    from app.timeutil import add_months
+    nxt = add_months(date(last.year, last.month, 1), 1)
+    monkeypatch.setattr(conversation, "today_lima", lambda: nxt)
+    r = chat("resumen")
+    assert "bancos aliados" in r["reply"]
+    r = chat("sí, envíalo")
+    assert r["reply"].startswith("✓ Listo. Enviamos tu informe de") and "BCP y Mibanco" in r["reply"] and "KAL-" in r["reply"]
+    assert r["media_url"] == f"https://kallpa.test/api/businesses/{shop['id']}/report/pdf"
+    assert "bancos aliados" not in chat("resumen")["reply"]          # ya decidió ese mes: no insiste
+    # aviso automático de fin de mes (prueba manual en la app)
+    from app.db import SessionLocal
+    from app import models as M
+    with SessionLocal() as db:
+        db.query(M.ReportConsent).delete()
+        db.commit()
+        b = db.get(M.Business, shop["id"])
+        monkeypatch.setattr(notify, "today_lima", lambda: last)
+        ns = notify.run(db, b, force="fin_mes")
+        assert ns and ns[-1].kind == "fin_mes" and "bancos aliados (BCP y Mibanco)" in ns[-1].text

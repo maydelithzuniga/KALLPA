@@ -359,9 +359,9 @@ function Settings({ ctx }: { ctx: Ctx }) {
       <div className="card">
         <h2>Mensajes automáticos</h2>
         <p className="faint" style={{ marginTop: 0 }}>Kallpa te escribe sola, máximo 2 veces al día: en la mañana los avisos (pagos, stock, fiados) y en la noche cómo te fue.
-          El domingo, tu semana; el día 1, tu mes. Pruébalos aquí (aparecen en tu chat y se envían por WhatsApp cuando está conectado):</p>
+          El domingo, tu semana; el último día del mes, si quieres enviar tu informe a los bancos aliados; el día 1, tu mes. Pruébalos aquí (aparecen en tu chat y se envían por WhatsApp cuando está conectado):</p>
         <div className="row wrap">
-          {([['manana', 'Avisos de la mañana'], ['noche', 'Resumen de la noche'], ['semana', 'Resumen del domingo'], ['mes', 'Resumen del día 1']] as const).map(([k, l]) => (
+          {([['manana', 'Avisos de la mañana'], ['noche', 'Resumen de la noche'], ['semana', 'Resumen del domingo'], ['mes', 'Resumen del día 1'], ['fin_mes', 'Fin de mes: informe a los bancos']] as const).map(([k, l]) => (
             <button key={k} className="btn sm ghost" onClick={async () => {
               const r = await send<{ text: string }[]>(`/api/businesses/${bid}/notifications/run?slot=${k}`)
               ctx.toast(r.length ? 'Listo: míralo en tu chat.' : 'No hay nada nuevo que avisar.'); ctx.refresh(); if (r.length) ctx.go('chat')

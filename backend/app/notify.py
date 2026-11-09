@@ -196,7 +196,13 @@ def monthly_text(db: Session, b: M.Business, d: date | None = None) -> str:
     if cur["withdrawals_cents"]:
         parts.append(f"Para la casa sacaste {soles(cur['withdrawals_cents'])}.")
     rep = report.build_bcp(db, b, add_months(m0, -2), month_start(d) - timedelta(days=1))
-    parts.append("Tu informe para el BCP está listo: ¿lo envío?")
+    from . import bank_consent
+    pm = bank_consent.pending_month(db, b, d)
+    if not pm and not db.scalar(select(M.ReportConsent).where(M.ReportConsent.business_id == b.id,
+                                                           M.ReportConsent.month == m0.strftime("%Y-%m"))):
+        pm = m0   # el día 1 siempre se pregunta por el mes que terminó, si aún no decidió
+    if pm:
+        parts.append(bank_consent.question_text(pm))
     cuota = rep["capacity"].get("suggested_max_installment_cents")
     if cuota:
         parts.append(f"Con tus ingresos por Yape podrías pagar una cuota de hasta {soles(cuota)} al mes.")
@@ -249,7 +255,7 @@ def run(db: Session, b: M.Business, now: datetime | None = None, force: str | No
     created: list[M.Notification] = []
     hello = f"Buenos días{', ' + b.owner_name if b.owner_name else ''}."
     slot_morning = force in ("manana", "mes") or (force is None and now.hour >= 6)
-    slot_night = force in ("noche", "semana") or (force is None and now.hour >= 19)
+    slot_night = force in ("noche", "semana", "fin_mes") or (force is None and now.hour >= 19)
     suffix = f":{force}:{now_lima().strftime('%H%M%S%f')}" if force else ""
     if slot_morning:
         lines, keys = _alerts_block(db, b, today)
@@ -271,9 +277,18 @@ def run(db: Session, b: M.Business, now: datetime | None = None, force: str | No
         else:
             text = daily_text(db, b, today)
             kind = "noche"
+        from . import bank_consent
+        import calendar
+        ref = today.replace(day=calendar.monthrange(today.year, today.month)[1]) if force == "fin_mes" else today
+        pm = bank_consent.pending_month(db, b, ref) if bank_consent.is_last_day(ref) else None
+        if pm:   # fin de mes: sí o sí se pregunta por el informe para los bancos aliados
+            text += "\n\n" + bank_consent.question_text(pm)
+            kind = "fin_mes"
         n = _deliver(db, b, f"{today}:noche{suffix}", kind, text, [])
         if n:
             created.append(n)
+            if pm:
+                _consent_draft(db, b, pm)
     return created
 
 
@@ -286,10 +301,10 @@ def mark_night_sent(db: Session, b: M.Business, text: str) -> None:
         db.commit()
 
 
-def _consent_draft(db: Session, b: M.Business) -> None:
-    """Para que un «sí» responda la pregunta del informe BCP en el chat o en WhatsApp."""
+def _consent_draft(db: Session, b: M.Business, month: date | None = None) -> None:
+    """Para que un «sí» responda la pregunta del informe (bancos aliados) en el chat o en WhatsApp."""
     import uuid
-    prev = add_months(month_start(today_lima()), -1).strftime("%Y-%m")
+    prev = (month or add_months(month_start(today_lima()), -1)).strftime("%Y-%m")
     if db.scalar(select(M.ReportConsent).where(M.ReportConsent.business_id == b.id, M.ReportConsent.month == prev)):
         return
     convs = [f"web:{b.id}", f"whatsapp:{b.phone or 'app-' + str(b.id)}"]
@@ -297,7 +312,7 @@ def _consent_draft(db: Session, b: M.Business) -> None:
         for d in db.scalars(select(M.Draft).where(M.Draft.business_id == b.id, M.Draft.conversation == conv, M.Draft.status == "abierto")).all():
             d.status = "cancelado"
         db.add(M.Draft(business_id=b.id, conversation=conv, op_id=uuid.uuid4().hex, action="consentimiento",
-                       data={"month": prev}, summary_read=True))
+                       data={"month": prev, "asked_on": today_lima().isoformat()}, summary_read=True))
     db.commit()
 
 
