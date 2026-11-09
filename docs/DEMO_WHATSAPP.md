@@ -96,6 +96,22 @@ lo que se registra es lo mismo. Lo escrito siempre lo procesan las reglas de Kal
 | `Juan se llevó un kilo de cebolla fiado` | ✓ te debe S/ 3 (Juan) |
 | `a quién tengo que cobrar` | Por cobrar (S/ 3): Juan S/ 3, de hoy. *(la lista es para Juana, no se le escribe a Juan)* |
 
+## Acto 4b · Asesor financiero: metas, consejos y préstamos (1 min)
+> *Mensaje:* «Kallpa no solo anota: aconseja con sus números y le dice qué crédito le conviene y si le alcanza.»
+
+| Juana escribe | Kallpa responde |
+|---|---|
+| `quiero otra meta` | ¡Me encanta que quieras ponerte una meta! 🎯 ¿Para qué quieres juntar plata? |
+| `una congeladora` | ¿Cuánto necesitas juntar para congeladora? |
+| `1500` | ¿Para cuándo la necesitas? (En 1 mes · En 3 meses · En 6 meses · No sé) |
+| `en 1 mes` | ✓ Meta guardada… separa S/ 50 al día… Es el 71% de lo que ganas — es bastante. 🏦 Si lo necesitas antes: un crédito de S/ 1,500 a 6 meses sería una cuota de S/ 275 (te alcanza)… Para llegar: vende más…, cobra lo que te deben |
+| `dame consejos` | 💡 Mis consejos: 1. qué producto te deja más… 2. cuánto vender al día para cubrir tus gastos fijos… 3. fiados por cobrar… 🏦 Producto que te conviene: crédito para capital de trabajo, cuota hasta S/ X: unos S/ Y a 6 meses o S/ Z a 12 meses |
+| `cuánto me prestarían?` | Cuota prudente y montos referenciales a 6 y 12 meses + consejos (TCEA, no «gota a gota») |
+| `puedo pedir un crédito de 3000?` | Un préstamo de S/ 3,000 a 12 meses sería una cuota de S/ 298… ✅ Te alcanza / ⚠️ es más de lo prudente: a 18 meses sí te alcanza |
+
+Con un negocio recién creado (pocos días de datos), Kallpa explica la regla (cuota ≤ 30% de lo que ganas) y pide
+registrar unas semanas; con meses de datos verificados por Yape da montos concretos.
+
 ## Acto 5 · Cierre del día contando la plata (1 min)
 | Juana escribe | Kallpa responde |
 |---|---|

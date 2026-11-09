@@ -105,6 +105,7 @@ def intro(props: list[dict[str, Any]]) -> str:
     n = [str(i + 1) for i in range(len(props))]
     opts = (", ".join(n[:-1]) + " o " + n[-1]) if len(n) > 1 else n[0]
     lines.append(f"¿Con cuál te gustaría comenzar? Responde {opts}. Si quieres saber por qué, pregúntame «¿por qué la 1?».")
+    lines.append("¿Tienes otra meta en mente? Dime para qué es, por ejemplo «una congeladora».")
     return "\n".join(lines)
 
 
@@ -117,8 +118,16 @@ def _which(t: str, props: list[dict[str, Any]], last: int | None) -> list[int]:
         return list(range(len(props)))
     found: list[int] = []
     for w, i in ORD.items():
+        if w.isdigit() or w.startswith(("la ", "opcion ")):
+            continue
         if re.search(rf"(?<![\d.]){re.escape(w)}\b", t) and i < len(props) and i not in found:
             found.append(i)
+    # números: solo «2», «la 2», «opción 2», «la 1 y la 3» (no «1 congeladora», que es «una congeladora»)
+    if re.fullmatch(r"(?:(?:la|el|opcion|numero|y|,|\s)*[123]\b)+(?:\s*pero.*)?", t.strip()) or re.search(r"\b(?:la|opcion|numero) [123]\b", t):
+        for d_ in re.findall(r"(?<![\d.])([123])(?![\d.])", re.split(r"\bpero\b", t)[0]):
+            i = int(d_) - 1
+            if i < len(props) and i not in found:
+                found.append(i)
     for pat, key in KEYWORDS:
         if re.search(pat, t):
             for i, p in enumerate(props):
@@ -164,6 +173,15 @@ def reply(eng, d: M.Draft, raw: str, intent: str = "") -> dict[str, Any] | None:
         return eng.resp(intro(props), d, quick(props))
     idx = _which(t, props, data.get("last"))
     if not idx:
+        # su propia meta: «una congeladora», «quiero comprar una balanza de 300»
+        own = re.sub(r"^(quiero |mejor |prefiero |otra |mi meta es |para |comprar |juntar para |ahorrar para |una |un |1 |la |el )+", "", t).strip()
+        if own and intent in ("desconocido", "valor", "meta") and len(own.split()) <= 6 and not re.search(r"\?|\b(que|cuanto|como)\b", t):
+            fields = nlu._goal_fields(t, eng.today)
+            name = fields.get("name") or own
+            d.status = "cancelado"
+            nd = eng.new_draft("meta", {"name": name[:1].upper() + name[1:], "kind": fields.get("kind", "ahorro"),
+                                        **{k: v for k, v in fields.items() if k in ("target_cents", "deadline")}})
+            return eng.step(nd)
         return None
     # monto propio: «la 1 pero con 200»
     amt = None

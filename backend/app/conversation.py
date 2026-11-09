@@ -134,7 +134,7 @@ class Engine:
             r = goals_coach.reply(self, draft, text, parsed.intent)
             if r is not None:
                 return r
-            if parsed.intent.startswith(("resumen", "explica", "caja", "fiados", "inventario", "consejos", "reponer", "ayuda")):
+            if parsed.intent.startswith(("resumen", "explica", "caja", "fiados", "inventario", "consejos", "reponer", "ayuda", "credito")):
                 r = self.answer_question(parsed.intent, parsed.text)
                 r["reply"] += "\n\n🎯 ¿Y con qué meta empiezas? Responde 1, 2 o 3."
                 r["draft"] = self.draft_view(draft)
@@ -289,7 +289,9 @@ class Engine:
             c = reconcile.cash_count(self.db, self.b, p.fields["pocket"], p.fields["counted_cents"])
             return self.resp(reconcile.count_text(self.db, c), count=metrics._count_dict(c))
         if i == "meta":
-            if not p.fields.get("target_cents"):   # «quiero una meta» sin monto: le propongo con sus números
+            has_goals = bool([g for g in metrics.goals(self.db, self.b) if g["status"] == "activa"])
+            if not p.fields.get("target_cents") and not p.fields.get("name") and not has_goals:
+                # «quiero una meta» sin monto ni para qué: le propongo con sus números (o la suya)
                 from . import goals_coach
                 txt, d, q = goals_coach.start(self)
                 if txt:
@@ -354,8 +356,12 @@ class Engine:
             return self.resp(f"Según tu caja y tus pagos registrados, hoy puedes usar {soles(max(0, cash['available_for_restock_cents']))} para reponer. "
                              "Dime «quiero reponer mercadería por 200» y lo sigo como meta.")
         if intent == "consejos":
-            tips = metrics.advice(db, b)
-            return self.resp(" ".join(tips[:2]))
+            from . import advisor
+            return self.resp(advisor.advice_text(db, b, self.today), quick=["Quiero una meta", "¿Cuánto me prestarían?"])
+        if intent == "credito":
+            from . import advisor
+            f = nlu.parse(text, self.products(), self.today).fields if text else {}
+            return self.resp(advisor.credit_text(db, b, self.today, f.get("amount_cents"), f.get("months"), f.get("purpose")))
         if intent.startswith("explica_"):
             return self.resp(summaries.explain(db, b, intent.split("_", 1)[1]))
         if intent == "fiados":
@@ -393,6 +399,11 @@ class Engine:
     def continue_draft(self, d: M.Draft, p: nlu.Parsed, raw: str, occurred_at) -> dict[str, Any] | None:
         if d.action == "cierre":
             return self.close_step(d, p, raw)
+        if d.action == "meta" and d.missing in ("deadline", "name") and p.intent in ("cancelar", "confirmar", "valor", "desconocido", "meta"):
+            # «No sé», «ya», «en 3 meses», «una congeladora»: son respuestas a la pregunta de la meta, no cancelar
+            if p.intent != "cancelar" or re.match(r"^no se\b", nlu.normalize(raw)):
+                self.apply_answer(d, p, raw)
+                return self.step(d)
         if p.intent == "deshacer":
             d.status = "cancelado"
             self.db.commit()
@@ -411,7 +422,7 @@ class Engine:
             d.status = "cancelado"
             self.db.flush()
             return None
-        if p.intent.startswith(("resumen", "explica", "caja", "fiados", "metas", "inventario", "consejos", "reponer", "ayuda")) \
+        if p.intent.startswith(("resumen", "explica", "caja", "fiados", "metas", "inventario", "consejos", "reponer", "ayuda", "credito")) \
                 and p.intent != "valor":
             r = self.answer_question(p.intent, p.text)
             r["reply"] += " (Sigo esperando tu respuesta sobre lo anterior.)"
@@ -580,8 +591,9 @@ class Engine:
                     data["amount_cents"] = amount
                 changed = True
             elif d.action == "meta":
-                data["target_cents"] = amount
-                changed = True
+                if amount >= 1000 and miss != "deadline":   # «una congeladora» no es S/ 1
+                    data["target_cents"] = amount
+                    changed = True
             elif d.action == "catalogo" and miss == "catalog_value":
                 data["ambiguous_cents"] = amount
                 changed = True
@@ -590,8 +602,21 @@ class Engine:
             data.pop("total_cents", None) if data.get("total_cents") == f["bare_number"] else None
             changed = True
         if miss == "name" and d.action == "meta":
-            data["name"] = cap(raw.strip())
+            nm = re.sub(r"^(para |quiero |comprar |juntar |ahorrar |una |un |1 |mi |la |el )+", "", nlu.normalize(raw)).strip()
+            gf = nlu._goal_fields(nlu.normalize(raw), self.today)
+            data["name"] = cap(gf.get("name") or nm or raw.strip())
+            if re.search(r"\b(reponer|mercaderia|reposicion|stock)\b", nlu.normalize(raw)):
+                data["kind"] = "reposicion"
+            for k2 in ("target_cents", "deadline"):
+                if gf.get(k2):
+                    data[k2] = gf[k2]
             changed = True
+        if miss == "deadline" and d.action == "meta":
+            t2 = nlu.normalize(raw)
+            gf = nlu._goal_fields(t2 if re.search(r"\b(en|dentro|fin|para)\b", t2) else "en " + t2, self.today)
+            if gf.get("deadline"):
+                data["deadline"] = gf["deadline"]
+            changed = True   # «no sé» también avanza (sin fecha)
         if miss == "stock_qty" and (f.get("quantity") or f.get("bare_number")):
             data["counted"] = f.get("quantity") or f["bare_number"] // 100
             changed = True
@@ -1368,9 +1393,18 @@ class Engine:
     # ------------------------------------------------------------ metas
     def step_goal(self, d: M.Draft, auto_confirm: bool = False) -> dict[str, Any]:
         data = dict(d.data)
+        if not data.get("name") and not data.get("target_cents") and data.get("kind") != "reposicion":
+            d.data = data
+            return self.ask(d, "name", "¡Me encanta que quieras ponerte una meta! 🎯 ¿Para qué quieres juntar plata? "
+                                       "Por ejemplo «una congeladora», «reponer mercadería», «un colchón para emergencias».")
         if not data.get("target_cents"):
             d.data = data
-            return self.ask(d, "amount", "¿Cuánto necesitas juntar?")
+            nm = f" para {data['name'].lower()}" if data.get("name") else ""
+            return self.ask(d, "amount", f"¿Cuánto necesitas juntar{nm}? Dime el monto aproximado, por ejemplo «1500».")
+        if not data.get("deadline") and not data.get("deadline_asked"):
+            data["deadline_asked"] = True
+            d.data = data
+            return self.ask(d, "deadline", "¿Para cuándo la necesitas?", ["En 1 mes", "En 3 meses", "En 6 meses", "No sé"])
         if not data.get("name"):
             data["name"] = "Reponer mercadería" if data.get("kind") == "reposicion" else "Mi meta"
         d.data = data
@@ -1387,10 +1421,13 @@ class Engine:
             cash = metrics.cash_position(self.db, self.b)
             if cash["available_for_restock_cents"] is not None:
                 txt += f". Hoy tienes {soles(max(0, cash['available_for_restock_cents']))} disponibles"
+        from . import advisor
+        plan = advisor.goal_plan_text(self.db, self.b, self.today, data["name"], data["target_cents"],
+                                      date.fromisoformat(data["deadline"]) if data.get("deadline") else None)
         d.missing = None
         d.summary_read = True
         self.db.commit()
-        return self.resp(txt + ". ¿La guardo?", d, ["Sí, guardar", "Cancelar"])
+        return self.resp(txt + ". " + plan + "\n¿La guardo?", d, ["Sí, guardar", "Cancelar"])
 
     def confirm_goal(self, d: M.Draft) -> dict[str, Any]:
         data = d.data
@@ -1401,7 +1438,11 @@ class Engine:
         d.status = "confirmado"
         self.db.commit()
         st = metrics.goal_status(self.db, self.b, g)
-        return self.resp("Meta guardada. " + st["message"])
+        from . import advisor
+        plan = advisor.goal_plan_text(self.db, self.b, self.today, g.name, g.target_cents, g.deadline)
+        return self.resp(f"✓ Meta guardada: «{g.name}», {soles(g.target_cents)}"
+                         + (f" para el {g.deadline.day}/{g.deadline.month}" if g.deadline else "") + ". "
+                         + plan + "\n" + advisor.goal_tips(self.db, self.b, self.today))
 
     # ------------------------------------------------------------ correcciones
     def last_movement(self) -> M.Movement | None:

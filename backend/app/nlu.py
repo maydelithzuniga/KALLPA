@@ -364,7 +364,7 @@ def find_person(t: str) -> str | None:
         r"\b(?:la |el )?(?:senora|senor|sra|sr|don|dona|vecina|vecino|tia|tio|casera|casero) ([a-zñ]+)",
         r"\bfie(?:\s\S+){0,5}? a (?:la |el )?([a-zñ]+)",
         r"^([a-zñ]{3,}) (?:se llevo|se lleva|se llevo|saco|pidio|me saco|me pidio)\b",
-        r"\bfiado a (?:la |el )?(?:senora |senor |don |dona )?([a-zñ]{3,})",
+        r"\b(?:fiado|al credito|a credito) a (?:la |el )?(?:senora |senor |don |dona )?([a-zñ]{3,})",
         r"\ba ([a-zñ]{3,})(?= me debe| le fie| fiado| le quedo| quedo debiendo)",
         r"\bde ([a-zñ]{3,})(?= me debe| quedo debiendo| le quedo)",
         r"^([a-zñ]{3,}) me (?:pago|pagó|debe|devolvio|yapeo|cancelo)",
@@ -400,7 +400,9 @@ QUESTION_PATTERNS: list[tuple[str, str]] = [
     (r"\bque (es|significa)\b.*\bcaja\b|\bexplica.*caja\b", "explica_caja"),
     (r"\bque (es|significa)\b.*\bcapacidad de pago\b|\bcuota\b.*\b(puedo|podria)\b", "explica_cuota"),
     (r"\b(cuanto|que) puedo (usar|gastar)\b.*\breponer\b|\breponer\b|\breposicion\b|\bproxima compra\b", "reponer"),
-    (r"\b(consejo|consejos|tips|recomienda|recomendacion|que hago|como mejoro|como vendo mas)\b", "consejos"),
+    (r"\b(consejo|consejos|tips|recomienda|recomiendas|recomendacion|recomendaciones|que hago|como mejoro|como vendo mas|"
+     r"como gano mas|ganar mas|mejorar mi negocio|mejoro mi negocio|crecer mi negocio|como crezco|como ahorro|ahorrar mas|"
+     r"asesor|asesoria|ayuda financiera|que me sugieres|sugerencias?)\b", "consejos"),
     (r"\b(resumen de la semana|como me fue (en )?la semana|esta semana|semanal)\b", "resumen_semana"),
     (r"\b(resumen del mes|como me fue (en )?el mes|este mes|mensual)\b", "resumen_mes"),
     (r"\b(resumen|como me fue|como voy|como va|cuanto gane|cuanto vendi|mi dia|como estoy)\b", "resumen_dia"),
@@ -505,6 +507,22 @@ def parse(text: str, products: list[ProductRef], today: date) -> Parsed:
         pm = match_products(t, products)
         p.intent = "catalogo"
         p.fields.update(_catalog_fields(t, pm))
+        return p
+
+    # --- préstamos / créditos (no confundir con «vendí al crédito», que es fiado)
+    if _has(t, r"\b(prestamo|prestamos|credito|creditos|financiamiento|financiar|financiarme|me prestan|me prestarian|"
+               r"prestarian|prestaria|endeudarme|sacar plata del banco|pedir plata al banco)\b") \
+            and not _has(t, r"^(vendi|fie|le fie|me compraron|se llevo)\b|\b(a|al) credito\b"):
+        p.intent = "credito"
+        amts = [a for a in (find_amounts(t) or _bare_amounts(t)) if a.cents >= 10000]
+        if amts:
+            p.fields["amount_cents"] = max(a.cents for a in amts)
+        mm = re.search(r"\b(\d{1,2}) mes(?:es)?\b", t)
+        if mm:
+            p.fields["months"] = int(mm.group(1))
+        pm = re.search(r"\bpara (?:comprar )?(?:una |un |1 |mi |la |el |unos |unas )?([a-zñ ]{3,40}?)(?:\?|$| de \d| a \d| en \d)", t)
+        if pm and not re.match(r"(mi negocio|el negocio|negocio|mi tienda|mi puesto)$", pm.group(1).strip()):
+            p.fields["purpose"] = pm.group(1).strip()
         return p
 
     # --- metas
@@ -739,7 +757,7 @@ def _payment_roles(t: str, amts: list[Amount]) -> dict[str, Any]:
         out["total_cents"] = totals[0]
     elif len(set(totals)) > 1:
         out["amount_options"] = totals
-    if (re.search(r"\b(fiado|al fiado|le fie|fie|me debe todo|todo fiado|a credito|me lo debe|me los debe|me la debe|me las debe|no me pago|me queda debiendo|me quedo debiendo)\b", t)
+    if (re.search(r"\b(fiado|al fiado|le fie|fie|me debe todo|todo fiado|a credito|al credito|me lo debe|me los debe|me la debe|me las debe|no me pago|me queda debiendo|me quedo debiendo)\b", t)
             or (re.search(r"\bme debe\b", t) and not amts)) \
             and "paid_cents" not in out:
         out["fully_credit"] = True
@@ -870,7 +888,7 @@ def _catalog_fields(t: str, pm: ProductMatch) -> dict[str, Any]:
 
 def _goal_fields(t: str, today: date) -> dict[str, Any]:
     out: dict[str, Any] = {}
-    amts = find_amounts(t) or _bare_amounts(t)
+    amts = [a for a in (find_amounts(t) or _bare_amounts(t)) if a.cents >= 1000]   # «una meta» no es S/ 1
     if amts:
         out["target_cents"] = max(a.cents for a in amts)
     skip = {"enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "setiembre",
@@ -897,11 +915,17 @@ def _goal_fields(t: str, today: date) -> dict[str, Any]:
     if re.search(r"\b(navidad|navidena|campana navidena)\b", t):
         y = today.year if today.month <= 12 else today.year + 1
         dl = date(y, 12, 15)
-    wm = re.search(r"\ben (\d+) (semanas|meses|dias)\b", t)
+    wm = re.search(r"\b(?:en|dentro de|para dentro de) (\d+) (semanas?|mes(?:es)?|dias?|anos?)\b", t)
     if wm:
         n = int(wm.group(1))
-        days = n * (7 if wm.group(2) == "semanas" else 30 if wm.group(2) == "meses" else 1)
+        u = wm.group(2)
+        days = n * (7 if u.startswith("semana") else 30 if u.startswith("mes") else 365 if u.startswith("ano") else 1)
         dl = today + timedelta(days=days)
+    if re.search(r"\b(fin de ano|fin de este ano|fines de ano)\b", t):
+        dl = date(today.year, 12, 20) if today < date(today.year, 12, 20) else date(today.year + 1, 12, 20)
+    if re.search(r"\b(fin de mes|fin de este mes)\b", t):
+        import calendar
+        dl = date(today.year, today.month, calendar.monthrange(today.year, today.month)[1])
     if dl:
         out["deadline"] = dl.isoformat()
     return out

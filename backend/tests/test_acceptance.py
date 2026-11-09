@@ -830,3 +830,28 @@ def test_39_si_un_modelo_no_responde_prueba_otro_mas_liviano(monkeypatch):
         x.clear()
     agent._thinking_by_model.clear()
     agent._models_cache.update(t=0.0, names=[])
+
+
+def test_40_asesor_metas_consejos_y_prestamos(client, shop, chat):
+    """«quiero una meta» pregunta para qué, cuánto y para cuándo; da plan y consejos; entiende préstamos."""
+    for _ in range(3):
+        chat("vendí 2 polos en efectivo")
+    chat("pago 300 de alquiler al mes")
+    r = chat("quiero ponerme una meta")["reply"]
+    assert "1️⃣" in r and "otra meta en mente" in r          # sin metas: propone con sus números, o la suya
+    assert "¿Cuánto necesitas juntar para congeladora?" in chat("una congeladora")["reply"]
+    assert "¿Para cuándo la necesitas?" in chat("1200")["reply"]
+    r = chat("en 3 meses")["reply"]
+    assert r.startswith("✓ Meta guardada: «Congeladora», S/ 1,200") and "al día" in r and "Para llegar" in r
+    assert "¿Para qué quieres juntar plata?" in chat("quiero otra meta")["reply"]   # ya tiene metas: pregunta para qué
+    chat("una balanza")
+    chat("300")
+    r = chat("No sé")["reply"]                       # «No sé» no cancela: guarda sin fecha
+    assert r.startswith("✓ Meta guardada: «Balanza», S/ 300")
+    r = chat("dame consejos")["reply"]
+    assert r.startswith("💡 Mis consejos para tu negocio:") and "🏦" in r and "gastos fijos" in r
+    r = chat("necesito un préstamo")["reply"]
+    assert "cuota" in r and "TCEA" in r
+    r = chat("puedo pedir un crédito de 2000?")["reply"]
+    assert r.startswith("Un préstamo de S/ 2,000 a 12 meses sería una cuota de unos")
+    assert chat("vendí 2 polos al crédito a Ana")["reply"].startswith("✓")   # «al crédito» sigue siendo fiado
