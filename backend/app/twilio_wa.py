@@ -72,7 +72,39 @@ def _from() -> str:
     return f if f.startswith("whatsapp:") else f"whatsapp:{'+' + f.lstrip('+')}"
 
 
+# Respuesta «en línea» (TwiML): mientras se atiende un mensaje entrante, las respuestas se juntan aquí y
+# salen en la misma respuesta HTTP del webhook. No usa la API REST (que exige perfil KYC aprobado en Twilio).
+import threading  # noqa: E402
+from xml.sax.saxutils import escape  # noqa: E402
+
+_local = threading.local()
+
+
+def collect_start() -> None:
+    _local.items = []
+
+
+def collect_end() -> list[dict[str, str | None]]:
+    items = getattr(_local, "items", None) or []
+    _local.items = None
+    return items
+
+
+def twiml(items: list[dict[str, str | None]]) -> str:
+    parts = []
+    for it in items:
+        inner = (f"<Body>{escape(it['body'] or '')}</Body>" if it.get("body") else "") + \
+                (f"<Media>{escape(it['media_url'])}</Media>" if it.get("media_url") else "")
+        if inner:
+            parts.append(f"<Message>{inner}</Message>")
+    return '<?xml version="1.0" encoding="UTF-8"?><Response>' + "".join(parts) + "</Response>"
+
+
 def send(to: str, body: str | None = None, media_url: str | None = None) -> bool:
+    items = getattr(_local, "items", None)
+    if items is not None:   # respondiendo a un mensaje entrante: va en el TwiML
+        items.append({"body": body[:1600] if body else None, "media_url": media_url})
+        return True
     data = {"From": _from(), "To": f"whatsapp:+{phone_of(to)}"}
     if body:
         data["Body"] = body[:1600]

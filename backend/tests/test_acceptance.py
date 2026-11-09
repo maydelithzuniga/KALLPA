@@ -493,7 +493,8 @@ def test_28_whatsapp_por_twilio_sandbox(client, monkeypatch):
                  "twilio_auth_token": "secreto", "twilio_validate": True, "app_base_url": "https://kallpa.test"}.items():
         monkeypatch.setattr(settings, k, v)
     sent = []
-    monkeypatch.setattr(twilio_wa, "send", lambda to, body=None, media_url=None: sent.append((to, body)) or True)
+    import httpx
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: sent.append(a) or (_ for _ in ()).throw(AssertionError("REST no")))
     with SessionLocal() as db:
         b = M.Business(name="Verdulería", phone="51919142871", setup_state="listo", kind="reventa")
         db.add(b)
@@ -510,9 +511,9 @@ def test_28_whatsapp_por_twilio_sandbox(client, monkeypatch):
             "Body": "vendí un polo a 20 soles en efectivo", "NumMedia": "0"}
     assert post(form, sign=False).status_code == 401
     r = post(form)
-    assert r.status_code == 200 and "<Response>" in r.text
-    post(form)   # reintento de Twilio: no se duplica
-    assert len(sent) == 1 and sent[0][0] == "51919142871" and "S/ 20" in sent[0][1]
+    assert r.status_code == 200 and "<Message><Body>" in r.text and "S/ 20" in r.text   # respuesta en línea (TwiML)
+    assert "<Message>" not in post(form).text   # reintento de Twilio: no se duplica
+    assert sent == []   # no usa la API REST (que exige KYC aprobado)
     d = client.get(f"/api/businesses/{bid}/dashboard").json()
     assert d["day"]["sales_cents"] == 2000
     h = client.get("/api/health").json()["whatsapp"]

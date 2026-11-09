@@ -817,10 +817,19 @@ async def twilio_receive(request: Request, background: BackgroundTasks):
     if not twilio_wa.verify_signature(candidates, form, request.headers.get("X-Twilio-Signature")):
         raise HTTPException(401, "Firma de Twilio inválida")
     m = twilio_wa.extract_message(form)
+    items: list = []
     if m and settings.whatsapp_available:
         m["provider"] = "twilio"
-        background.add_task(_wa_process, [m])
-    return Response(content="<Response></Response>", media_type="application/xml")
+
+        def run() -> list:
+            twilio_wa.collect_start()
+            try:
+                _wa_process([m])
+            finally:
+                return twilio_wa.collect_end()
+        from starlette.concurrency import run_in_threadpool
+        items = await run_in_threadpool(run)
+    return Response(content=twilio_wa.twiml(items), media_type="application/xml")
 
 
 class BridgeIn(BaseModel):
